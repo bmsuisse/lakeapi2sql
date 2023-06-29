@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.1,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "lakeapi2sql"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "lakeapi2sql._lowlevel"
+
+
+[tool.pyright]
+venv = ".venv"
+venvPath = "."
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+
+
+[tool.black]
+line-length = 119
