@@ -22,7 +22,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, x86, aarch64, armv7, s390x, ppc64le]
+        target: 
+          - { NAME: "x86_64", CONTAINER: "ghcr.io/pyca/cryptography-manylinux2014:x86_64" }
+          - { NAME: "aarch64", CONTAINER: "ghcr.io/pyca/cryptography-manylinux2014_aarch64" }
+          - { NAME: "x86_64", CONTAINER: "ghcr.io/pyca/cryptography-musllinux_1_1:x86_64" }
+          - { NAME: "aarch64", CONTAINER: "ghcr.io/pyca/cryptography-manylinux2014_aarch64" }
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -33,7 +37,8 @@ jobs:
         env:
           OPENSSL_DIR: /usr/local/ssl
         with:
-          target: ${{ matrix.target }}
+          target: ${{ matrix.target.NAME }}
+          container: ${{ matrix.target.CONTAINER }}
           args: --release --out dist --find-interpreter
           sccache: 'true'
           manylinux: auto
