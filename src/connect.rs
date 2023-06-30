@@ -1,3 +1,4 @@
+use tiberius::SqlBrowser;
 use tiberius::error::Error;
 use tiberius::AuthMethod;
 use tiberius::Client;
@@ -16,7 +17,8 @@ pub async fn connect_sql(
     }
 
     config.encryption(tiberius::EncryptionLevel::Required);
-    let tcp = TcpStream::connect(config.get_addr()).await?;
+    
+    let tcp = TcpStream::connect_named(&config).await?;
     tcp.set_nodelay(true)?;
 
     let client = match Client::connect(config, tcp.compat_write()).await {
