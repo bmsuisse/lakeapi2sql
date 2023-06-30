@@ -43,6 +43,7 @@ jobs:
           container: ${{ matrix.target.CONTAINER }}
           args: --release --out dist --find-interpreter
           sccache: 'true'
+          before-script-linux: python -m ensurepip --upgrade
           manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@v3
