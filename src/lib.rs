@@ -1,4 +1,6 @@
-use arrow2::datatypes::{Field, Schema};
+use std::sync::Arc;
+
+use arrow::datatypes::{Field, Schema};
 use pyo3::exceptions::{PyConnectionError, PyIOError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
@@ -8,10 +10,10 @@ pub mod connect;
 
 fn field_into_dict<'a>(py: Python<'a>, field: &'a Field) -> &'a PyDict {
     let d = PyDict::new(py);
-    d.set_item("name", field.name.clone()).unwrap();
+    d.set_item("name", field.name().clone()).unwrap();
     d
 }
-fn into_dict<'a>(py: Python<'a>, schema: Schema) -> &PyDict {
+fn into_dict<'a>(py: Python<'a>, schema: Arc<Schema>) -> &PyDict {
     let d = PyDict::new(py);
     let fields: Vec<&PyDict> = schema
         .fields
@@ -40,7 +42,7 @@ async fn insert_arrow_stream_to_sql_rs(
     user: String,
     password: String,
     aad_token: Option<String>,
-) -> Result<Schema, PyErr> {
+) -> Result<Arc<Schema>, PyErr> {
     let db_client = connect::connect_sql(&connection_string, aad_token).await;
     if let Err(er) = db_client {
         return Err(PyErr::new::<PyConnectionError, _>(format!(

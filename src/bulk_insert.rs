@@ -1,4 +1,4 @@
-use std::{thread, time::Duration, sync::Arc};
+use std::sync::Arc;
 
 use arrow::{
     ipc::reader::{StreamReader}, datatypes::Schema, record_batch::RecordBatch,
@@ -44,7 +44,7 @@ pub async fn bulk_insert<'a>(
         .into_async_read()
         .compat();
     let (tx, mut rx) = mpsc::channel::<RecordBatch>(2);
-    let mut syncstr = SyncIoBridge::new(res);
+    let syncstr = SyncIoBridge::new(res);
     let worker = tokio::task::spawn_blocking(move || {       
         
         let mut reader = StreamReader::try_new(syncstr, None).unwrap();
