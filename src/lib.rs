@@ -11,6 +11,8 @@ pub mod connect;
 fn field_into_dict<'a>(py: Python<'a>, field: &'a Field) -> &'a PyDict {
     let d = PyDict::new(py);
     d.set_item("name", field.name().clone()).unwrap();
+    d.set_item("arrow_type", field.data_type().to_string()).unwrap();
+    
     d
 }
 fn into_dict<'a>(py: Python<'a>, schema: Arc<Schema>) -> &PyDict {
