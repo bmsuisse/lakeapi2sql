@@ -1,7 +1,7 @@
-use std::sync::Arc;
+use std::{sync::Arc, fmt::Display};
 
 use arrow::{
-    ipc::reader::{StreamReader}, datatypes::Schema, record_batch::RecordBatch,
+    ipc::reader::{StreamReader}, datatypes::Schema, record_batch::RecordBatch, error::ArrowError,
 };
 use futures::stream::TryStreamExt;
 use tiberius::Client;
@@ -14,6 +14,31 @@ use log::info;
 use tokio::sync::mpsc;
 
 use crate::arrow_convert::get_token_rows;
+
+#[derive(Debug)]
+pub(crate) struct  ArrowErrorWrap {
+    error: ArrowError
+}
+impl Display for ArrowErrorWrap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("arrow error {}", self.error))
+    }
+}
+impl  std::error::Error for ArrowErrorWrap{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+
+
+    fn description(&self) -> &str {
+        "description() is deprecated; use Display"
+    }
+
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        self.source()
+    }
+
+}
 
 pub async fn bulk_insert<'a>(
     db_client: &'a mut Client<Compat<TcpStream>>,
@@ -47,7 +72,11 @@ pub async fn bulk_insert<'a>(
     let syncstr = SyncIoBridge::new(res);
     let worker = tokio::task::spawn_blocking(move || {       
         
-        let mut reader = StreamReader::try_new(syncstr, None).unwrap();
+        let reader = StreamReader::try_new(syncstr, None);
+        if let Err(err) = reader {
+            return  Err(ArrowErrorWrap { error: err});
+        }
+        let mut reader = reader.unwrap();
         let schema = reader.schema();
         loop {
             match reader.next() {
@@ -66,7 +95,7 @@ pub async fn bulk_insert<'a>(
     while let Some(v) = rx.recv().await {
         let nrows = v.num_rows();
         info!("received {nrows}");
-        let rows = get_token_rows(&v);        
+        let rows = get_token_rows(&v)?;        
         let mut blk: tiberius::BulkLoadRequest<'_, Compat<TcpStream>> =
             db_client.bulk_insert(table_name).await?;
         for row in rows {
@@ -77,7 +106,7 @@ pub async fn bulk_insert<'a>(
     }
     let schema = worker.await?;
     if let Err(e) = schema {
-        return e;
+        return Err(Box::new(e));
     }
     Ok(schema.unwrap())
 }

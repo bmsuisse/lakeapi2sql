@@ -18,8 +18,11 @@ use arrow::array::UInt16Array;
 use arrow::array::UInt32Array;
 use arrow::array::UInt64Array;
 use arrow::array::UInt8Array;
+use arrow::datatypes::DataType;
 use arrow::record_batch::RecordBatch;
+use pyo3::exceptions::PyValueError;
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::time::Duration as StdDuration;
 use tiberius::time::time::Date;
 use tiberius::time::time::PrimitiveDateTime;
@@ -29,6 +32,7 @@ use tiberius::IntoSql;
 use tiberius::ToSql;
 use tiberius::TokenRow;
 use time::Duration;
+
 
 // These functions loop like a hack, because, well, there are probably a hack
 fn to_datetime(val: Option<PrimitiveDateTime>) -> ColumnData<'static> {
@@ -49,14 +53,38 @@ fn to_time(val: Option<Time>) -> ColumnData<'static> {
         _ => panic!("should be mapped"),
     };
 }
+#[derive(Debug)]
+pub(crate) struct  NotSupportedError {
+    dtype: DataType
+}
+impl Display for NotSupportedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Cannot use data type {}", self.dtype))
+    }
+}
+impl  std::error::Error for NotSupportedError{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
 
-pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Vec<TokenRow<'a>> {
+
+    fn description(&self) -> &str {
+        "description() is deprecated; use Display"
+    }
+
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        self.source()
+    }
+
+}
+
+pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<'a>>, Box<dyn std::error::Error + Send + Sync>> {
     let unix_min_date =
-        Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1).unwrap();
-    let unix_min: PrimitiveDateTime = unix_min_date.with_time(Time::from_hms(0, 0, 0).unwrap());
+        Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1)?;
+    let unix_min: PrimitiveDateTime = unix_min_date.with_time(Time::from_hms(0, 0, 0)?);
 
     let rows = batch.num_rows();
-    let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows.try_into().unwrap()];
+    let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows.try_into()?];
     for col in batch.columns() {
         //For docs: col.data_type().to_physical_type()
         match col.data_type() {
@@ -312,8 +340,8 @@ pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Vec<TokenRow<'a>> {
                 }
             }
             
-            _ => todo!(), //other => panic!("Not supported {:?}", other),
+            dt => return Err(Box::new(NotSupportedError { dtype : dt.clone() })), //other => panic!("Not supported {:?}", other),
         }
     }
-    token_rows
+    Ok(token_rows)
 }
