@@ -1,9 +1,7 @@
-use std::{thread, time::Duration};
+use std::{thread, time::Duration, sync::Arc};
 
-use arrow2::{
-    array::Array,
-    chunk::Chunk,
-    io::ipc::read::{self, read_stream_metadata, StreamReader}, datatypes::Schema,
+use arrow::{
+    ipc::reader::{StreamReader}, datatypes::Schema, record_batch::RecordBatch,
 };
 use futures::stream::TryStreamExt;
 use tiberius::Client;
@@ -23,7 +21,7 @@ pub async fn bulk_insert<'a>(
     url: &str,
     user: &str,
     password: &str,
-) -> Result<Schema, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {
     //let mut row = TokenRow::new();
     //row.push(1.into_sql());
     //blk.send(row).await?;
@@ -45,29 +43,28 @@ pub async fn bulk_insert<'a>(
         .map_err(|e| futures::io::Error::new(futures::io::ErrorKind::Other, e))
         .into_async_read()
         .compat();
-    let (tx, mut rx) = mpsc::channel::<Chunk<Box<dyn Array>>>(2);
+    let (tx, mut rx) = mpsc::channel::<RecordBatch>(2);
     let mut syncstr = SyncIoBridge::new(res);
-    let worker = tokio::task::spawn_blocking(move || {
-        let metadata = read_stream_metadata(&mut syncstr).unwrap();
-        let schema = metadata.schema.clone();
-        let mut reader = StreamReader::new(syncstr, metadata, None);
+    let worker = tokio::task::spawn_blocking(move || {       
+        
+        let mut reader = StreamReader::try_new(syncstr, None).unwrap();
+        let schema = reader.schema();
         loop {
             match reader.next() {
                 Some(x) => match x {
-                    Ok(read::StreamState::Some(b)) => {
+                    Ok(b) => {
                         tx.blocking_send(b).unwrap();
                     }
-                    Ok(read::StreamState::Waiting) => thread::sleep(Duration::from_millis(2000)),
                     Err(l) => println!("{:?}", l),
                 },
                 None => break,
             };
         }
-        schema
+        Ok(schema)
     });
 
     while let Some(v) = rx.recv().await {
-        let nrows = v.len();
+        let nrows = v.num_rows();
         info!("received {nrows}");
         let rows = get_token_rows(&v);        
         let mut blk: tiberius::BulkLoadRequest<'_, Compat<TcpStream>> =
@@ -79,5 +76,8 @@ pub async fn bulk_insert<'a>(
         info!("Written {nrows}");
     }
     let schema = worker.await?;
-    Ok(schema)
+    if let Err(e) = schema {
+        return e;
+    }
+    Ok(schema.unwrap())
 }

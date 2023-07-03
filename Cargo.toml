@@ -9,7 +9,7 @@ name = "lake2sql"
 crate-type = ["lib","cdylib"]
 
 [dependencies]
-arrow2 = {version = "0.17.2", features = ["io_ipc"] }
+arrow = {version = "42.0.0", features = ["ipc_compression"] }
 futures = "0.3.28"
 log = "0.4.19"
 pyo3-asyncio ={ version = "0.18", features = ["attributes", "tokio-runtime"] }

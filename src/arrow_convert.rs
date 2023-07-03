@@ -1,11 +1,15 @@
-use arrow2::array::Array;
-use arrow2::array::BooleanArray;
-use arrow2::array::Float16Array;
-use arrow2::array::Int32Array;
-use arrow2::array::NullArray;
-use arrow2::array::PrimitiveArray;
-use arrow2::array::Utf8Array;
-use arrow2::chunk::Chunk;
+use arrow::array::Array;
+use arrow::array::BooleanArray;
+use arrow::array::Float16Array;
+use arrow::array::Int16Array;
+use arrow::array::Int32Array;
+use arrow::array::Int64Array;
+use arrow::array::Int8Array;
+use arrow::array::LargeStringArray;
+use arrow::array::PrimitiveArray;
+use arrow::array::StringArray;
+use arrow::array::UInt8Array;
+use arrow::record_batch::RecordBatch;
 use std::borrow::Cow;
 use std::time::Duration as StdDuration;
 use tiberius::time::time::Date;
@@ -37,19 +41,19 @@ fn to_time(val: Option<Time>) -> ColumnData<'static> {
     };
 }
 
-pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenRow<'a>> {
+pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Vec<TokenRow<'a>> {
     let unix_min_date =
         Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1).unwrap();
     let unix_min: PrimitiveDateTime = unix_min_date.with_time(Time::from_hms(0, 0, 0).unwrap());
 
-    let cols = batch.columns();
-    let rows = batch.len();
-    let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows];
-
-    for col in cols {
+    let recbat: &RecordBatch = batch.into();
+    let rows = batch.num_rows();
+    let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows.try_into().unwrap()];
+    let nrcols = batch.num_columns();
+    for col in batch.columns() {
         //For docs: col.data_type().to_physical_type()
         match col.data_type() {
-            arrow2::datatypes::DataType::Boolean => {
+            arrow::datatypes::DataType::Boolean => {
                 let ba = col.as_any().downcast_ref::<BooleanArray>().unwrap();
 
                 let mut rowindex = 0;
@@ -58,17 +62,17 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Int32 => {
+            arrow::datatypes::DataType::Int32 => {
                 let ba = col.as_any().downcast_ref::<Int32Array>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::I32(val.copied()));
+                    token_rows[rowindex].push(ColumnData::I32(val));
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Utf8 => {
-                let ba = col.as_any().downcast_ref::<Utf8Array<i32>>().unwrap();
+            arrow::datatypes::DataType::Utf8 => {
+                let ba = col.as_any().downcast_ref::<StringArray>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
@@ -79,8 +83,8 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::LargeUtf8 => {
-                let ba = col.as_any().downcast_ref::<Utf8Array<i64>>().unwrap();
+            arrow::datatypes::DataType::LargeUtf8 => {
+                let ba = col.as_any().downcast_ref::<LargeStringArray>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
@@ -91,74 +95,74 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Timestamp(
-                arrow2::datatypes::TimeUnit::Millisecond,
+            arrow::datatypes::DataType::Timestamp(
+                arrow::datatypes::TimeUnit::Millisecond,
                 None,
             ) => {
-                let ba = col.as_any().downcast_ref::<PrimitiveArray<i64>>().unwrap();
+                let ba = col.as_any().downcast_ref::<Int64Array>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     let dt_val = match val {
-                        Some(vs) => Some(unix_min + StdDuration::from_millis(*vs as u64)),
+                        Some(vs) => Some(unix_min + StdDuration::from_millis(vs as u64)),
                         None => None,
                     };
                     token_rows[rowindex].push(to_datetime(dt_val));
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Timestamp(
-                arrow2::datatypes::TimeUnit::Microsecond,
+            arrow::datatypes::DataType::Timestamp(
+                arrow::datatypes::TimeUnit::Microsecond,
                 None,
             ) => {
-                let ba = col.as_any().downcast_ref::<PrimitiveArray<i64>>().unwrap();
+                let ba = col.as_any().downcast_ref::<Int64Array>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     let dt_val = match val {
-                        Some(vs) => Some(unix_min + StdDuration::from_micros(*vs as u64)),
+                        Some(vs) => Some(unix_min + StdDuration::from_micros(vs)),
                         None => None,
                     };
                     token_rows[rowindex].push(to_datetime(dt_val));
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Null => {
+            arrow::datatypes::DataType::Null => {
                 for rowindex in 0..rows {
                     token_rows[rowindex].push(ColumnData::I32(None));
                 }
             }
-            arrow2::datatypes::DataType::UInt8 => {
-                let ba = col.as_any().downcast_ref::<PrimitiveArray<u8>>().unwrap();
+            arrow::datatypes::DataType::UInt8 => {
+                let ba = col.as_any().downcast_ref::<UInt8Array>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::U8(val.copied()));
+                    token_rows[rowindex].push(ColumnData::U8(val));
                     rowindex += 1;
                 }
             }
             arrow2::datatypes::DataType::Int8 => {
-                let ba = col.as_any().downcast_ref::<PrimitiveArray<i8>>().unwrap();
+                let ba = col.as_any().downcast_ref::<Int8Array>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     token_rows[rowindex].push(ColumnData::I16(match val {
-                        Some(v) => Some(*v as i16),
+                        Some(v) => Some(v as i16),
                         None => None,
                     }));
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Int16 => {
-                let ba = col.as_any().downcast_ref::<PrimitiveArray<i16>>().unwrap();
+            arrow::datatypes::DataType::Int16 => {
+                let ba = col.as_any().downcast_ref::<Int16Array>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::I16(val.copied()));
+                    token_rows[rowindex].push(ColumnData::I16(val));
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Int64 => {
+            arrow::datatypes::DataType::Int64 => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<i64>>().unwrap();
 
                 let mut rowindex = 0;
@@ -167,7 +171,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::UInt16 => {
+            arrow::datatypes::DataType::UInt16 => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<u16>>().unwrap();
 
                 let mut rowindex = 0;
@@ -179,7 +183,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::UInt32 => {
+            arrow::datatypes::DataType::UInt32 => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<u32>>().unwrap();
 
                 let mut rowindex = 0;
@@ -191,7 +195,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::UInt64 => {
+            arrow::datatypes::DataType::UInt64 => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<u64>>().unwrap();
 
                 let mut rowindex = 0;
@@ -203,7 +207,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Float16 => {
+            arrow::datatypes::DataType::Float16 => {
                 let ba = col.as_any().downcast_ref::<Float16Array>().unwrap();
 
                 let mut rowindex = 0;
@@ -215,7 +219,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Float32 => {
+            arrow::datatypes::DataType::Float32 => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<f32>>().unwrap();
 
                 let mut rowindex = 0;
@@ -224,7 +228,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Float64 => {
+            arrow::datatypes::DataType::Float64 => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<f64>>().unwrap();
 
                 let mut rowindex = 0;
@@ -233,7 +237,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Date32 => {
+            arrow::datatypes::DataType::Date32 => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<i32>>().unwrap();
 
                 let mut rowindex = 0;
@@ -246,7 +250,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Date64 => {
+            arrow::datatypes::DataType::Date64 => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<i64>>().unwrap();
 
                 let mut rowindex = 0;
@@ -259,7 +263,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Time32(unit) => {
+            arrow::datatypes::DataType::Time32(unit) => {
                 let ba = col.as_any().downcast_ref::<PrimitiveArray<i32>>().unwrap();
 
                 let mut rowindex = 0;
@@ -294,22 +298,7 @@ pub(crate) fn get_token_rows<'a>(batch: &'a Chunk<Box<dyn Array>>) -> Vec<TokenR
                     rowindex += 1;
                 }
             }
-            arrow2::datatypes::DataType::Time64(_) => todo!(),
-            arrow2::datatypes::DataType::Duration(_) => todo!(),
-            arrow2::datatypes::DataType::Interval(_) => todo!(),
-            arrow2::datatypes::DataType::Binary => todo!(),
-            arrow2::datatypes::DataType::FixedSizeBinary(_) => todo!(),
-            arrow2::datatypes::DataType::LargeBinary => todo!(),
-            arrow2::datatypes::DataType::List(_) => todo!(),
-            arrow2::datatypes::DataType::FixedSizeList(_, _) => todo!(),
-            arrow2::datatypes::DataType::LargeList(_) => todo!(),
-            arrow2::datatypes::DataType::Struct(_) => todo!(),
-            arrow2::datatypes::DataType::Union(_, _, _) => todo!(),
-            arrow2::datatypes::DataType::Map(_, _) => todo!(),
-            arrow2::datatypes::DataType::Dictionary(_, _, _) => todo!(),
-            arrow2::datatypes::DataType::Decimal(_, _) => todo!(),
-            arrow2::datatypes::DataType::Decimal256(_, _) => todo!(),
-            arrow2::datatypes::DataType::Extension(_, _, _) => todo!(),
+            
             _ => todo!(), //other => panic!("Not supported {:?}", other),
         }
     }
