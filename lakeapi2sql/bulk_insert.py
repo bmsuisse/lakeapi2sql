@@ -16,19 +16,20 @@ async def insert_http_arrow_stream_to_sql(connection_string: str, table_name: st
         auth_part = next((p for p in parts if p[0].casefold()=="Authentication".casefold()))
         parts.remove(auth_part)
         credential= None
-        if auth_part[1] in ["ActiveDirectoryDefault"]:
+        lautchmechano = auth_part[1].lower()
+        if lautchmechano in ["ActiveDirectoryDefault".lower()]:
             from azure.identity.aio import DefaultAzureCredential
             credential = DefaultAzureCredential()
-        elif auth_part[1] in ["ActiveDirectoryMSI", "ActiveDirectoryManagedIdentity"]:
+        elif lautchmechano in ["ActiveDirectoryMSI".lower(), "ActiveDirectoryManagedIdentity".lower()]:
             from azure.identity.aio import ManagedIdentityCredential  
             client_part = next((p for p in parts if p[0].lower() in ["user", "msiclientid"]), None)
             if client_part:
                 parts.remove(client_part)
             credential = ManagedIdentityCredential(client_id=client_part[1] if client_part else None)
-        elif auth_part[1] == "ActiveDirectoryInteractive":
+        elif lautchmechano == "ActiveDirectoryInteractive".lower():
             from azure.identity import InteractiveBrowserCredential 
             credential = InteractiveBrowserCredential()
-        elif auth_part[1] == "SqlPassword":# that's kind of an no-op
+        elif lautchmechano == "SqlPassword":# that's kind of an no-op
             connection_string = ";".join((p[0] + "=" + p[1] for p in parts))
         if credential is not None:
             from azure.core.credentials import AccessToken
