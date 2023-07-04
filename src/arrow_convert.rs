@@ -35,7 +35,6 @@ use tiberius::ToSql;
 use tiberius::TokenRow;
 use time::Duration;
 
-
 // These functions loop like a hack, because, well, there are probably a hack
 fn to_datetime(val: Option<PrimitiveDateTime>) -> ColumnData<'static> {
     return match val.to_sql() {
@@ -56,19 +55,18 @@ fn to_time(val: Option<Time>) -> ColumnData<'static> {
     };
 }
 #[derive(Debug)]
-pub(crate) struct  NotSupportedError {
-    dtype: DataType
+pub(crate) struct NotSupportedError {
+    dtype: DataType,
 }
 impl Display for NotSupportedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("Cannot use data type {}", self.dtype))
     }
 }
-impl  std::error::Error for NotSupportedError{
+impl std::error::Error for NotSupportedError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
-
 
     fn description(&self) -> &str {
         "description() is deprecated; use Display"
@@ -77,12 +75,12 @@ impl  std::error::Error for NotSupportedError{
     fn cause(&self) -> Option<&dyn std::error::Error> {
         self.source()
     }
-
 }
 
-pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<'a>>, Box<dyn std::error::Error + Send + Sync>> {
-    let unix_min_date =
-        Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1)?;
+pub(crate) fn get_token_rows<'a>(
+    batch: &'a RecordBatch,
+) -> Result<Vec<TokenRow<'a>>, Box<dyn std::error::Error + Send + Sync>> {
+    let unix_min_date = Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1)?;
     let unix_min: PrimitiveDateTime = unix_min_date.with_time(Time::from_hms(0, 0, 0)?);
 
     let rows = batch.num_rows();
@@ -135,12 +133,21 @@ pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<
                 arrow::datatypes::TimeUnit::Millisecond,
                 None,
             ) => {
-                let ba = col.as_any().downcast_ref::<TimestampMillisecondArray>().unwrap();
+                let ba = col
+                    .as_any()
+                    .downcast_ref::<TimestampMillisecondArray>()
+                    .unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     let dt_val = match val {
-                        Some(vs) => Some(unix_min + StdDuration::from_millis(vs as u64)),
+                        Some(vs) => {
+                            if vs < 0 {
+                                None
+                            } else {
+                                Some(unix_min + StdDuration::from_millis(vs as u64))
+                            }
+                        }
                         None => None,
                     };
                     token_rows[rowindex].push(to_datetime(dt_val));
@@ -151,12 +158,21 @@ pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<
                 arrow::datatypes::TimeUnit::Microsecond,
                 None,
             ) => {
-                let ba = col.as_any().downcast_ref::<TimestampMicrosecondArray>().unwrap();
+                let ba = col
+                    .as_any()
+                    .downcast_ref::<TimestampMicrosecondArray>()
+                    .unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     let dt_val = match val {
-                        Some(vs) => Some(unix_min + StdDuration::from_micros(vs as u64)),
+                        Some(vs) => {
+                            if vs < 0 {
+                                None
+                            } else {
+                                Some(unix_min + StdDuration::from_micros(vs as u64))
+                            }
+                        }
                         None => None,
                     };
                     token_rows[rowindex].push(to_datetime(dt_val));
@@ -279,7 +295,13 @@ pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     let dt_val = match val {
-                        Some(vs) => Some(unix_min_date + Duration::days(vs as i64)),
+                        Some(vs) => {
+                            if vs < 0 {
+                                None
+                            } else {
+                                Some(unix_min_date + Duration::days(vs as i64))
+                            }
+                        }
                         None => None,
                     };
                     token_rows[rowindex].push(to_date(dt_val));
@@ -292,7 +314,13 @@ pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     let dt_val = match val {
-                        Some(vs) => Some(unix_min_date + Duration::days(vs)),
+                        Some(vs) => {
+                            if vs < 0 {
+                                None
+                            } else {
+                                Some(unix_min_date + Duration::days(vs))
+                            }
+                        }
                         None => None,
                     };
                     token_rows[rowindex].push(to_date(dt_val));
@@ -305,69 +333,83 @@ pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     let dt_val: Option<Time> = match val {
-                        Some(vs) =>  Some(
-                                Time::from_hms(
-                                    // TODO: Testing
-                                    (vs / 60 / 60).try_into().unwrap(),
-                                    ((vs / 60) % 60).try_into().unwrap(),
-                                    (vs % 60).try_into().unwrap(),
+                        Some(vs) => {
+                            if vs < 0 {
+                                None
+                            } else {
+                                Some(
+                                    Time::from_hms(
+                                        // TODO: Testing
+                                        (vs / 60 / 60).try_into().unwrap(),
+                                        ((vs / 60) % 60).try_into().unwrap(),
+                                        (vs % 60).try_into().unwrap(),
+                                    )
+                                    .unwrap(),
                                 )
-                                .unwrap(),
-                            ),
+                            }
+                        }
                         None => None,
                     };
                     token_rows[rowindex].push(to_time(dt_val));
                     rowindex += 1;
                 }
-            },
+            }
             arrow::datatypes::DataType::Time32(arrow::datatypes::TimeUnit::Millisecond) => {
                 let ba = col.as_any().downcast_ref::<Time32SecondArray>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     let dt_val: Option<Time> = match val {
-                        Some(vs) => Some(Time::from_hms_milli(
-                                    (vs / 1000 / 60 / 60).try_into().unwrap(),
-                                    ((vs / 1000 / 60) % 60).try_into().unwrap(),
-                                    ((vs / 1000) % 60).try_into().unwrap(),
-                                    (vs % 1000).try_into().unwrap(),
+                        Some(vs) => {
+                            if vs < 0 {
+                                None
+                            } else {
+                                Some(
+                                    Time::from_hms_milli(
+                                        (vs / 1000 / 60 / 60).try_into().unwrap(),
+                                        ((vs / 1000 / 60) % 60).try_into().unwrap(),
+                                        ((vs / 1000) % 60).try_into().unwrap(),
+                                        (vs % 1000).try_into().unwrap(),
+                                    )
+                                    .unwrap(),
                                 )
-                                .unwrap())                        ,
+                            }
+                        }
 
                         None => None,
                     };
                     token_rows[rowindex].push(to_time(dt_val));
                     rowindex += 1;
                 }
-            },
+            }
             arrow::datatypes::DataType::Binary => {
                 let ba = col.as_any().downcast_ref::<BinaryArray>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x|Cow::from(x))));
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x| Cow::from(x))));
                     rowindex += 1;
-                }   
-            },
+                }
+            }
             arrow::datatypes::DataType::LargeBinary => {
                 let ba = col.as_any().downcast_ref::<LargeBinaryArray>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x|Cow::from(x))));
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x| Cow::from(x))));
                     rowindex += 1;
                 }
-            },
+            }
             arrow::datatypes::DataType::FixedSizeBinary(_) => {
                 let ba = col.as_any().downcast_ref::<FixedSizeBinaryArray>().unwrap();
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x|Cow::from(x))));
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x| Cow::from(x))));
                     rowindex += 1;
                 }
-            },
-            dt => return Err(Box::new(NotSupportedError { dtype : dt.clone() })), //other => panic!("Not supported {:?}", other),
+            }
+            dt => return Err(Box::new(NotSupportedError { dtype: dt.clone() })), //other => panic!("Not supported {:?}", other),
         }
     }
     Ok(token_rows)
