@@ -6,13 +6,16 @@ The main goal is to be very fast in this one task. It does not guarantee atomici
 
 It's meant to be used from Python, the Logic is written in Rust.
 
+## Features
+
+- You can specify Authentication=ActiveDirectoryMSI|ActiveDirectoryDefault|ActiveDirectoryInteractive in the connection string similar to .Net/ODBC SQL Driver. This requires the azure-identity package to be installed
+
 ## Roadmap
 
 There is still a lot todo:
 
 - Allow reading from pyarrow instead of HTTP
 - Allow passing more flexible HTTP Authentication options
-- Integrate Azure Authentication
 - Add option to read from database and write to a flat file
 - Document
 - Test
