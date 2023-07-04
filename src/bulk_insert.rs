@@ -37,7 +37,30 @@ impl  std::error::Error for ArrowErrorWrap{
     fn cause(&self) -> Option<&dyn std::error::Error> {
         self.source()
     }
+}
 
+#[derive(Debug)]
+pub(crate) struct  SendErrorWrap {
+    error: String
+}
+impl Display for SendErrorWrap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("send error {}", self.error))
+    }
+}
+impl  std::error::Error for SendErrorWrap{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+
+
+    fn description(&self) -> &str {
+        "description() is deprecated; use Display"
+    }
+
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        self.source()
+    }
 }
 
 pub async fn bulk_insert<'a>(
@@ -70,11 +93,11 @@ pub async fn bulk_insert<'a>(
         .compat();
     let (tx, mut rx) = mpsc::channel::<RecordBatch>(2);
     let syncstr = SyncIoBridge::new(res);
-    let worker = tokio::task::spawn_blocking(move || {       
+    let worker = tokio::task::spawn_blocking(move || -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {       
         
         let reader = StreamReader::try_new(syncstr, None);
         if let Err(err) = reader {
-            return  Err(ArrowErrorWrap { error: err});
+            return  Err(Box::new(ArrowErrorWrap { error: err}));
         }
         let mut reader = reader.unwrap();
         let schema = reader.schema();
@@ -82,7 +105,7 @@ pub async fn bulk_insert<'a>(
             match reader.next() {
                 Some(x) => match x {
                     Ok(b) => {
-                        tx.blocking_send(b).unwrap();
+                        tx.blocking_send(b).map_err(|e|Box::new(SendErrorWrap{ error : e.to_string() }))?;
                     }
                     Err(l) => println!("{:?}", l),
                 },
@@ -105,8 +128,5 @@ pub async fn bulk_insert<'a>(
         info!("Written {nrows}");
     }
     let schema = worker.await?;
-    if let Err(e) = schema {
-        return Err(Box::new(e));
-    }
-    Ok(schema.unwrap())
+    schema
 }

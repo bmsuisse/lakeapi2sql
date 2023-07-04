@@ -1,7 +1,9 @@
 use arrow::array::Array;
+use arrow::array::BinaryArray;
 use arrow::array::BooleanArray;
 use arrow::array::Date32Array;
 use arrow::array::Date64Array;
+use arrow::array::FixedSizeBinaryArray;
 use arrow::array::Float16Array;
 use arrow::array::Float32Array;
 use arrow::array::Float64Array;
@@ -9,6 +11,7 @@ use arrow::array::Int16Array;
 use arrow::array::Int32Array;
 use arrow::array::Int64Array;
 use arrow::array::Int8Array;
+use arrow::array::LargeBinaryArray;
 use arrow::array::LargeStringArray;
 use arrow::array::StringArray;
 use arrow::array::Time32SecondArray;
@@ -20,7 +23,6 @@ use arrow::array::UInt64Array;
 use arrow::array::UInt8Array;
 use arrow::datatypes::DataType;
 use arrow::record_batch::RecordBatch;
-use pyo3::exceptions::PyValueError;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::time::Duration as StdDuration;
@@ -90,7 +92,6 @@ pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<
         match col.data_type() {
             arrow::datatypes::DataType::Boolean => {
                 let ba = col.as_any().downcast_ref::<BooleanArray>().unwrap();
-
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     token_rows[rowindex].push(val.into_sql());
@@ -338,8 +339,34 @@ pub(crate) fn get_token_rows<'a>(batch: &'a RecordBatch) -> Result<Vec<TokenRow<
                     token_rows[rowindex].push(to_time(dt_val));
                     rowindex += 1;
                 }
-            }
-            
+            },
+            arrow::datatypes::DataType::Binary => {
+                let ba = col.as_any().downcast_ref::<BinaryArray>().unwrap();
+
+                let mut rowindex = 0;
+                for val in ba.iter() {
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x|Cow::from(x))));
+                    rowindex += 1;
+                }   
+            },
+            arrow::datatypes::DataType::LargeBinary => {
+                let ba = col.as_any().downcast_ref::<LargeBinaryArray>().unwrap();
+
+                let mut rowindex = 0;
+                for val in ba.iter() {
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x|Cow::from(x))));
+                    rowindex += 1;
+                }
+            },
+            arrow::datatypes::DataType::FixedSizeBinary(_) => {
+                let ba = col.as_any().downcast_ref::<FixedSizeBinaryArray>().unwrap();
+
+                let mut rowindex = 0;
+                for val in ba.iter() {
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x|Cow::from(x))));
+                    rowindex += 1;
+                }
+            },
             dt => return Err(Box::new(NotSupportedError { dtype : dt.clone() })), //other => panic!("Not supported {:?}", other),
         }
     }
