@@ -3,6 +3,7 @@ use arrow::array::BinaryArray;
 use arrow::array::BooleanArray;
 use arrow::array::Date32Array;
 use arrow::array::Date64Array;
+use arrow::array::Decimal128Array;
 use arrow::array::FixedSizeBinaryArray;
 use arrow::array::Float16Array;
 use arrow::array::Float32Array;
@@ -26,6 +27,7 @@ use arrow::record_batch::RecordBatch;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::time::Duration as StdDuration;
+use tiberius::numeric::Numeric;
 use tiberius::time::time::Date;
 use tiberius::time::time::PrimitiveDateTime;
 use tiberius::time::time::Time;
@@ -423,6 +425,17 @@ pub(crate) fn get_token_rows<'a>(
                 let mut rowindex = 0;
                 for val in ba.iter() {
                     token_rows[rowindex].push(ColumnData::Binary(val.map(|x| Cow::from(x))));
+                    rowindex += 1;
+                }
+            }
+            arrow::datatypes::DataType::Decimal128(_, s) => {
+                let ba = col.as_any().downcast_ref::<Decimal128Array>().unwrap();
+                let scale: u8 = s.clone().try_into()?;
+                let mut rowindex = 0;
+                for val in ba.iter() {
+                    token_rows[rowindex].push(ColumnData::Numeric(
+                        val.map(|x| Numeric::new_with_scale(x, scale)),
+                    ));
                     rowindex += 1;
                 }
             }
