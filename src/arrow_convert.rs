@@ -79,13 +79,22 @@ impl std::error::Error for NotSupportedError {
 
 pub(crate) fn get_token_rows<'a>(
     batch: &'a RecordBatch,
+    cols: &'a Vec<String>,
 ) -> Result<Vec<TokenRow<'a>>, Box<dyn std::error::Error + Send + Sync>> {
     let unix_min_date = Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1)?;
     let unix_min: PrimitiveDateTime = unix_min_date.with_time(Time::from_hms(0, 0, 0)?);
 
     let rows = batch.num_rows();
     let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows.try_into()?];
-    for col in batch.columns() {
+    for colname in cols {
+        let mightcol = batch.column_by_name(colname);
+        if let None = mightcol {
+            for rowindex in 0..rows {
+                token_rows[rowindex].push(ColumnData::String(None));
+            }
+            continue;
+        }
+        let col = mightcol.unwrap();
         //For docs: col.data_type().to_physical_type()
         match col.data_type() {
             arrow::datatypes::DataType::Boolean => {

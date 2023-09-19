@@ -72,6 +72,30 @@ pub async fn bulk_insert<'a>(
     //row.push(1.into_sql());
     //blk.send(row).await?;
     //blk.finalize().await?;
+
+    let colres = db_client
+        .query(
+            "
+    select sc.name from sys.columns sc
+        inner join sys.objects o on o.object_id=sc.object_id
+        inner join sys.schemas sch on sch.schema_id=o.schema_id  
+        where is_computed=0 and is_identity=0 and system_type_id<>189
+            and o.name=parsename(@P1,1)
+            and sch.name=coalesce(parsename(@P1,2), SCHEMA_NAME())
+        order by sc.column_id
+    ",
+            &[&table_name],
+        )
+        .await?;
+    let res = colres.into_first_result().await?;
+    let collist = res
+        .iter()
+        .map(|row| {
+            let val: &str = row.get(0).unwrap();
+            return val.to_string();
+        })
+        .collect::<Vec<String>>();
+
     let cclient = reqwest::Client::new();
 
     // a bit too complex if you ask me: https://github.com/benkay86/async-applied/tree/master/reqwest-tokio-compat
@@ -121,7 +145,7 @@ pub async fn bulk_insert<'a>(
     while let Some(v) = rx.recv().await {
         let nrows = v.num_rows();
         info!("received {nrows}");
-        let rows = get_token_rows(&v)?;
+        let rows = get_token_rows(&v, &collist)?;
         let mut blk: tiberius::BulkLoadRequest<'_, Compat<TcpStream>> =
             db_client.bulk_insert(table_name).await?;
         for row in rows {
