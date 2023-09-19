@@ -72,7 +72,6 @@ pub async fn bulk_insert<'a>(
     //row.push(1.into_sql());
     //blk.send(row).await?;
     //blk.finalize().await?;
-
     let colres = db_client
         .query(
             "

@@ -12,7 +12,7 @@ crate-type = ["lib","cdylib"]
 arrow = {version = "42.0.0", features = ["ipc_compression"] }
 futures = "0.3.28"
 log = "0.4.19"
-pyo3-asyncio ={ version = "0.18", features = ["attributes", "tokio-runtime"] }
+pyo3-asyncio ={ version = "0.19", features = ["attributes", "tokio-runtime"] }
 pyo3-log = "0.8.2"
 reqwest = {version = "0.11.18", features = ["stream"]}
 tiberius = {version = "0.12.2", features = ["time", "sql-browser-tokio"] }
@@ -24,6 +24,6 @@ tokio-util = {version = "0.7.8", features=["compat","io-util","io"]}
 openssl = { version = "0.10", features = ["vendored"] }
 
 [dependencies.pyo3]
-version = "0.18.0"
+version = "0.19.0"
 # "abi3-py37" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.10
 features = ["abi3-py310"]
