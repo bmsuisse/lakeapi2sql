@@ -86,7 +86,15 @@ pub(crate) fn get_token_rows<'a>(
 
     let rows = batch.num_rows();
     let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows.try_into()?];
-    for colname in cols {
+
+    let batchcols = batch
+        .schema()
+        .fields()
+        .iter()
+        .map(|x| x.name().to_string())
+        .collect::<Vec<String>>();
+    let colsnames = if cols.len() == 0 { &batchcols } else { cols };
+    for colname in colsnames {
         let mightcol = batch.column_by_name(colname);
         if let None = mightcol {
             for rowindex in 0..rows {
