@@ -1,34 +1,33 @@
-use std::{sync::Arc, fmt::Display};
+use std::{fmt::Display, sync::Arc};
 
 use arrow::{
-    ipc::reader::{StreamReader}, datatypes::Schema, record_batch::RecordBatch, error::ArrowError,
+    datatypes::Schema, error::ArrowError, ipc::reader::StreamReader, record_batch::RecordBatch,
 };
 use futures::stream::TryStreamExt;
+use log::info;
 use tiberius::Client;
 use tokio::net::TcpStream;
 use tokio_util::compat::Compat;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::io::SyncIoBridge;
-use log::info;
 
 use tokio::sync::mpsc;
 
 use crate::arrow_convert::get_token_rows;
 
 #[derive(Debug)]
-pub(crate) struct  ArrowErrorWrap {
-    error: ArrowError
+pub(crate) struct ArrowErrorWrap {
+    error: ArrowError,
 }
 impl Display for ArrowErrorWrap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("arrow error {}", self.error))
     }
 }
-impl  std::error::Error for ArrowErrorWrap{
+impl std::error::Error for ArrowErrorWrap {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
-
 
     fn description(&self) -> &str {
         "description() is deprecated; use Display"
@@ -40,19 +39,18 @@ impl  std::error::Error for ArrowErrorWrap{
 }
 
 #[derive(Debug)]
-pub(crate) struct  SendErrorWrap {
-    error: String
+pub(crate) struct SendErrorWrap {
+    error: String,
 }
 impl Display for SendErrorWrap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("send error {}", self.error))
     }
 }
-impl  std::error::Error for SendErrorWrap{
+impl std::error::Error for SendErrorWrap {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
-
 
     fn description(&self) -> &str {
         "description() is deprecated; use Display"
@@ -84,7 +82,7 @@ pub async fn bulk_insert<'a>(
         .send()
         .await?
         .error_for_status()?;
-    
+
     info!("received http response");
     let res = res
         .bytes_stream()
@@ -93,32 +91,37 @@ pub async fn bulk_insert<'a>(
         .compat();
     let (tx, mut rx) = mpsc::channel::<RecordBatch>(2);
     let syncstr = SyncIoBridge::new(res);
-    let worker = tokio::task::spawn_blocking(move || -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {       
-        
-        let reader = StreamReader::try_new(syncstr, None);
-        if let Err(err) = reader {
-            return  Err(Box::new(ArrowErrorWrap { error: err}));
-        }
-        let mut reader = reader.unwrap();
-        let schema = reader.schema();
-        loop {
-            match reader.next() {
-                Some(x) => match x {
-                    Ok(b) => {
-                        tx.blocking_send(b).map_err(|e|Box::new(SendErrorWrap{ error : e.to_string() }))?;
-                    }
-                    Err(l) => println!("{:?}", l),
-                },
-                None => break,
-            };
-        }
-        Ok(schema)
-    });
+    let worker = tokio::task::spawn_blocking(
+        move || -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {
+            let reader = StreamReader::try_new(syncstr, None);
+            if let Err(err) = reader {
+                return Err(Box::new(ArrowErrorWrap { error: err }));
+            }
+            let mut reader = reader.unwrap();
+            let schema = reader.schema();
+            loop {
+                match reader.next() {
+                    Some(x) => match x {
+                        Ok(b) => {
+                            tx.blocking_send(b).map_err(|e| {
+                                Box::new(SendErrorWrap {
+                                    error: e.to_string(),
+                                })
+                            })?;
+                        }
+                        Err(l) => println!("{:?}", l),
+                    },
+                    None => break,
+                };
+            }
+            Ok(schema)
+        },
+    );
 
     while let Some(v) = rx.recv().await {
         let nrows = v.num_rows();
         info!("received {nrows}");
-        let rows = get_token_rows(&v)?;        
+        let rows = get_token_rows(&v)?;
         let mut blk: tiberius::BulkLoadRequest<'_, Compat<TcpStream>> =
             db_client.bulk_insert(table_name).await?;
         for row in rows {

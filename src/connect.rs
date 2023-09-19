@@ -1,8 +1,8 @@
-use tiberius::SqlBrowser;
 use tiberius::error::Error;
 use tiberius::AuthMethod;
 use tiberius::Client;
 use tiberius::Config;
+use tiberius::SqlBrowser;
 use tokio::net::TcpStream;
 use tokio_util::compat::Compat;
 use tokio_util::compat::TokioAsyncWriteCompatExt;
@@ -17,7 +17,7 @@ pub async fn connect_sql(
     }
 
     config.encryption(tiberius::EncryptionLevel::Required);
-    
+
     let tcp = TcpStream::connect_named(&config).await?;
     tcp.set_nodelay(true)?;
 
