@@ -6,6 +6,7 @@ use arrow::{
 use futures::stream::TryStreamExt;
 use log::info;
 use tiberius::Client;
+use tiberius::ColumnType;
 use tokio::net::TcpStream;
 use tokio_util::compat::Compat;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -61,6 +62,21 @@ impl std::error::Error for SendErrorWrap {
     }
 }
 
+async fn get_cols_from_table(
+    db_client: &mut Client<Compat<TcpStream>>,
+    table_name: &str,
+) -> Result<Vec<(String, ColumnType)>, Box<dyn std::error::Error + Send + Sync>> {
+    let query = format!("SELECT TOP 0 * FROM {}", table_name);
+    let mut colres = db_client.simple_query(query).await?;
+    Ok(colres
+        .columns()
+        .await?
+        .unwrap()
+        .iter()
+        .map(|x| (x.name().to_string(), x.column_type()))
+        .collect::<Vec<(String, ColumnType)>>())
+}
+
 pub async fn bulk_insert<'a>(
     db_client: &'a mut Client<Compat<TcpStream>>,
     table_name: &str,
@@ -72,29 +88,9 @@ pub async fn bulk_insert<'a>(
     //row.push(1.into_sql());
     //blk.send(row).await?;
     //blk.finalize().await?;
-    let colres = db_client
-        .query(
-            "
-    select sc.name from sys.columns sc
-        inner join sys.objects o on o.object_id=sc.object_id
-        inner join sys.schemas sch on sch.schema_id=o.schema_id  
-        where is_computed=0 and is_identity=0 and system_type_id<>189
-            and o.name=parsename(@P1,1)
-            and sch.name=coalesce(parsename(@P1,2), SCHEMA_NAME())
-        order by sc.column_id
-    ",
-            &[&table_name],
-        )
-        .await?;
-    let res = colres.into_first_result().await?;
-    let collist = res
-        .iter()
-        .map(|row| {
-            let val: &str = row.get(0).unwrap();
-            return val.to_string();
-        })
-        .collect::<Vec<String>>();
 
+    let collist = get_cols_from_table(db_client, table_name).await?;
+    println!("{:?}", collist);
     let cclient = reqwest::Client::new();
 
     // a bit too complex if you ask me: https://github.com/benkay86/async-applied/tree/master/reqwest-tokio-compat
@@ -147,8 +143,8 @@ pub async fn bulk_insert<'a>(
         let rows = get_token_rows(&v, &collist)?;
         let mut blk: tiberius::BulkLoadRequest<'_, Compat<TcpStream>> =
             db_client.bulk_insert(table_name).await?;
-        for row in rows {
-            blk.send(row).await?;
+        for rowdt in rows {
+            blk.send(rowdt).await?;
         }
         blk.finalize().await?;
         info!("Written {nrows}");

@@ -1,24 +1,29 @@
 [package]
 name = "lake2sql"
-version = "0.2.0"
+version = "0.5.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "lake2sql"
-crate-type = ["lib","cdylib"]
+crate-type = ["lib", "cdylib"]
 
 [dependencies]
-arrow = {version = "42.0.0", features = ["ipc_compression"] }
+arrow = { version = "42.0.0", features = ["ipc_compression"] }
 futures = "0.3.28"
 log = "0.4.19"
-pyo3-asyncio ={ version = "0.19", features = ["attributes", "tokio-runtime"] }
+pyo3-asyncio = { version = "0.19", features = ["attributes", "tokio-runtime"] }
 pyo3-log = "0.8.2"
-reqwest = {version = "0.11.18", features = ["stream"]}
-tiberius = {version = "0.12.2", features = ["time", "sql-browser-tokio"] }
+reqwest = { version = "0.11.18", features = ["stream"] }
+rust_decimal = "1.32.0"
+tiberius = { version = "0.12.2", features = [
+    "time",
+    "sql-browser-tokio",
+    "rust_decimal",
+] }
 time = "0.3.22"
-tokio = {version ="1.28.2", features=["net", "macros"]}
-tokio-util = {version = "0.7.8", features=["compat","io-util","io"]}
+tokio = { version = "1.28.2", features = ["net", "macros"] }
+tokio-util = { version = "0.7.8", features = ["compat", "io-util", "io"] }
 
 [target.'cfg(unix)'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }

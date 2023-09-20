@@ -24,6 +24,7 @@ use arrow::array::UInt64Array;
 use arrow::array::UInt8Array;
 use arrow::datatypes::DataType;
 use arrow::record_batch::RecordBatch;
+use rust_decimal::prelude::*;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::time::Duration as StdDuration;
@@ -32,37 +33,21 @@ use tiberius::time::time::Date;
 use tiberius::time::time::PrimitiveDateTime;
 use tiberius::time::time::Time;
 use tiberius::ColumnData;
-use tiberius::IntoSql;
+use tiberius::ColumnType;
 use tiberius::ToSql;
 use tiberius::TokenRow;
-use time::Duration;
 
-// These functions loop like a hack, because, well, there are probably a hack
-fn to_datetime(val: Option<PrimitiveDateTime>) -> ColumnData<'static> {
-    return match val.to_sql() {
-        ColumnData::DateTime2(x) => ColumnData::DateTime2(x),
-        _ => panic!("should be mapped"),
-    };
-}
-fn to_date(val: Option<Date>) -> ColumnData<'static> {
-    return match val.to_sql() {
-        ColumnData::Date(x) => ColumnData::Date(x),
-        _ => panic!("should be mapped"),
-    };
-}
-fn to_time(val: Option<Time>) -> ColumnData<'static> {
-    return match val.to_sql() {
-        ColumnData::Time(x) => ColumnData::Time(x),
-        _ => panic!("should be mapped"),
-    };
-}
 #[derive(Debug)]
 pub(crate) struct NotSupportedError {
     dtype: DataType,
+    column_type: ColumnType,
 }
 impl Display for NotSupportedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("Cannot use data type {}", self.dtype))
+        f.write_fmt(format_args!(
+            "Cannot use data type {}. Sql Type: {:?}",
+            self.dtype, self.column_type
+        ))
     }
 }
 impl std::error::Error for NotSupportedError {
@@ -79,43 +64,61 @@ impl std::error::Error for NotSupportedError {
     }
 }
 
+fn to_col_dt<'a>(d: ColumnData<'_>) -> ColumnData<'a> {
+    match d {
+        ColumnData::DateTime2(dt) => ColumnData::DateTime2(dt),
+        ColumnData::DateTime(dt) => ColumnData::DateTime(dt),
+        ColumnData::Time(dt) => ColumnData::Time(dt),
+        _ => panic!("Not a time field"),
+    }
+}
+
 pub(crate) fn get_token_rows<'a>(
     batch: &'a RecordBatch,
-    cols: &'a Vec<String>,
+    colsnames: &'a Vec<(String, ColumnType)>,
 ) -> Result<Vec<TokenRow<'a>>, Box<dyn std::error::Error + Send + Sync>> {
     let unix_min_date = Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1)?;
+    let sql_min_date = Date::from_calendar_date(1, tiberius::time::time::Month::January, 1)?;
+    let sql_min_datetime = Date::from_calendar_date(1900, tiberius::time::time::Month::January, 1)?;
     let unix_min: PrimitiveDateTime = unix_min_date.with_time(Time::from_hms(0, 0, 0)?);
-
+    let sql_min_to_unix_min = (unix_min_date - sql_min_date).whole_days();
+    let sql_min_dt_to_unix_min = (unix_min_date - sql_min_datetime).whole_days();
     let rows = batch.num_rows();
-    let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows.try_into()?];
-
-    let batchcols = batch
-        .schema()
-        .fields()
-        .iter()
-        .map(|x| x.name().to_string())
-        .collect::<Vec<String>>();
-    let colsnames = if cols.len() == 0 { &batchcols } else { cols };
-    for colname in colsnames {
+    //let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows.try_into()?];
+    let mut token_rows: Vec<TokenRow<'a>> = Vec::with_capacity(rows);
+    for _ in 0..rows {
+        token_rows.push(TokenRow::new());
+    }
+    for (colname, coltype) in colsnames {
         let mightcol = batch.column_by_name(colname);
+
         if let None = mightcol {
+            println!("colname: {}. Not found", colname);
             for rowindex in 0..rows {
                 token_rows[rowindex].push(ColumnData::String(None));
             }
             continue;
         }
         let col = mightcol.unwrap();
+        println!(
+            "colname: {}. Dt: {:?}. Sql Type: {:?}",
+            colname,
+            col.data_type(),
+            coltype
+        );
         //For docs: col.data_type().to_physical_type()
         match col.data_type() {
             arrow::datatypes::DataType::Boolean => {
+                assert_eq!(coltype, &ColumnType::Bit);
                 let ba = col.as_any().downcast_ref::<BooleanArray>().unwrap();
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(val.into_sql());
+                    token_rows[rowindex].push(ColumnData::Bit(val));
                     rowindex += 1;
                 }
             }
             arrow::datatypes::DataType::Int32 => {
+                assert!(coltype == &ColumnType::Int4 || coltype == &ColumnType::Intn);
                 let ba = col.as_any().downcast_ref::<Int32Array>().unwrap();
 
                 let mut rowindex = 0;
@@ -159,17 +162,17 @@ pub(crate) fn get_token_rows<'a>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    let dt_val = match val {
+                    token_rows[rowindex].push(match val {
                         Some(vs) => {
                             if vs < 0 {
-                                None
+                                ColumnData::DateTime2(None)
                             } else {
-                                Some(unix_min + StdDuration::from_millis(vs as u64))
+                                let pt = unix_min + StdDuration::from_millis(vs as u64);
+                                to_col_dt(pt.to_sql())
                             }
                         }
-                        None => None,
-                    };
-                    token_rows[rowindex].push(to_datetime(dt_val));
+                        None => ColumnData::DateTime2(None),
+                    });
                     rowindex += 1;
                 }
             }
@@ -184,17 +187,16 @@ pub(crate) fn get_token_rows<'a>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    let dt_val = match val {
+                    token_rows[rowindex].push(match val {
                         Some(vs) => {
                             if vs < 0 {
-                                None
+                                ColumnData::DateTime2(None)
                             } else {
-                                Some(unix_min + StdDuration::from_micros(vs as u64))
+                                to_col_dt((unix_min + StdDuration::from_micros(vs as u64)).to_sql())
                             }
                         }
-                        None => None,
-                    };
-                    token_rows[rowindex].push(to_datetime(dt_val));
+                        None => ColumnData::DateTime2(None),
+                    });
                     rowindex += 1;
                 }
             }
@@ -310,21 +312,35 @@ pub(crate) fn get_token_rows<'a>(
             }
             arrow::datatypes::DataType::Date32 => {
                 let ba = col.as_any().downcast_ref::<Date32Array>().unwrap();
-
-                let mut rowindex = 0;
-                for val in ba.iter() {
-                    let dt_val = match val {
-                        Some(vs) => {
-                            if vs < 0 {
-                                None
-                            } else {
-                                Some(unix_min_date + Duration::days(vs as i64))
+                if coltype == &ColumnType::Datetime || coltype == &ColumnType::Datetimen {
+                    let mut rowindex = 0;
+                    for val in ba.iter() {
+                        token_rows[rowindex].push(match val {
+                            Some(vs) => {
+                                let days = sql_min_dt_to_unix_min + (vs as i64);
+                                ColumnData::DateTime(Some(tiberius::time::DateTime::new(
+                                    days.try_into().unwrap(),
+                                    0,
+                                )))
                             }
-                        }
-                        None => None,
-                    };
-                    token_rows[rowindex].push(to_date(dt_val));
-                    rowindex += 1;
+                            None => ColumnData::DateTime(None),
+                        });
+                        rowindex += 1;
+                    }
+                } else {
+                    let mut rowindex = 0;
+                    for val in ba.iter() {
+                        token_rows[rowindex].push(match val {
+                            Some(vs) => {
+                                let days = sql_min_to_unix_min + (vs as i64);
+                                ColumnData::Date(Some(tiberius::time::Date::new(
+                                    days.try_into().unwrap(),
+                                )))
+                            }
+                            None => ColumnData::Date(None),
+                        });
+                        rowindex += 1;
+                    }
                 }
             }
             arrow::datatypes::DataType::Date64 => {
@@ -332,17 +348,15 @@ pub(crate) fn get_token_rows<'a>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    let dt_val = match val {
+                    token_rows[rowindex].push(match val {
                         Some(vs) => {
-                            if vs < 0 {
-                                None
-                            } else {
-                                Some(unix_min_date + Duration::days(vs))
-                            }
+                            let days = sql_min_to_unix_min + vs;
+                            ColumnData::Date(Some(tiberius::time::Date::new(
+                                days.try_into().unwrap(),
+                            )))
                         }
-                        None => None,
-                    };
-                    token_rows[rowindex].push(to_date(dt_val));
+                        None => ColumnData::Date(None),
+                    });
                     rowindex += 1;
                 }
             }
@@ -351,25 +365,25 @@ pub(crate) fn get_token_rows<'a>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    let dt_val: Option<Time> = match val {
+                    token_rows[rowindex].push(match val {
                         Some(vs) => {
                             if vs < 0 {
-                                None
+                                ColumnData::Time(None)
                             } else {
-                                Some(
+                                to_col_dt(
                                     Time::from_hms(
                                         // TODO: Testing
                                         (vs / 60 / 60).try_into().unwrap(),
                                         ((vs / 60) % 60).try_into().unwrap(),
                                         (vs % 60).try_into().unwrap(),
                                     )
-                                    .unwrap(),
+                                    .unwrap()
+                                    .to_sql(),
                                 )
                             }
                         }
-                        None => None,
-                    };
-                    token_rows[rowindex].push(to_time(dt_val));
+                        None => ColumnData::Time(None),
+                    });
                     rowindex += 1;
                 }
             }
@@ -378,26 +392,26 @@ pub(crate) fn get_token_rows<'a>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    let dt_val: Option<Time> = match val {
+                    token_rows[rowindex].push(match val {
                         Some(vs) => {
                             if vs < 0 {
-                                None
+                                ColumnData::Time(None)
                             } else {
-                                Some(
+                                to_col_dt(
                                     Time::from_hms_milli(
                                         (vs / 1000 / 60 / 60).try_into().unwrap(),
                                         ((vs / 1000 / 60) % 60).try_into().unwrap(),
                                         ((vs / 1000) % 60).try_into().unwrap(),
                                         (vs % 1000).try_into().unwrap(),
                                     )
-                                    .unwrap(),
+                                    .unwrap()
+                                    .to_sql(),
                                 )
                             }
                         }
 
-                        None => None,
-                    };
-                    token_rows[rowindex].push(to_time(dt_val));
+                        None => ColumnData::Time(None),
+                    });
                     rowindex += 1;
                 }
             }
@@ -432,14 +446,39 @@ pub(crate) fn get_token_rows<'a>(
                 let ba = col.as_any().downcast_ref::<Decimal128Array>().unwrap();
                 let scale: u8 = s.clone().try_into()?;
                 let mut rowindex = 0;
-                for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::Numeric(
-                        val.map(|x| Numeric::new_with_scale(x, scale)),
-                    ));
-                    rowindex += 1;
+                match coltype {
+                    ColumnType::Numericn | ColumnType::Decimaln => {
+                        for val in ba.iter() {
+                            token_rows[rowindex].push(ColumnData::Numeric(
+                                val.map(|x| Numeric::new_with_scale(x, scale)),
+                            ));
+                            rowindex += 1;
+                        }
+                    }
+                    ColumnType::Floatn => {
+                        for val in ba.iter() {
+                            token_rows[rowindex].push(ColumnData::F64(val.map(|x| {
+                                Decimal::from_i128_with_scale(x, scale.into())
+                                    .to_f64()
+                                    .unwrap()
+                            })));
+                            rowindex += 1;
+                        }
+                    }
+                    _ => {
+                        return Err(Box::new(NotSupportedError {
+                            dtype: col.data_type().clone(),
+                            column_type: coltype.clone(),
+                        }))
+                    } //other => panic!("Not supported {:?}", other),
                 }
             }
-            dt => return Err(Box::new(NotSupportedError { dtype: dt.clone() })), //other => panic!("Not supported {:?}", other),
+            dt => {
+                return Err(Box::new(NotSupportedError {
+                    dtype: dt.clone(),
+                    column_type: coltype.clone(),
+                }))
+            } //other => panic!("Not supported {:?}", other),
         }
     }
     Ok(token_rows)
