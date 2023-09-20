@@ -90,7 +90,7 @@ pub async fn bulk_insert<'a>(
     //blk.finalize().await?;
 
     let collist = get_cols_from_table(db_client, table_name).await?;
-    println!("{:?}", collist);
+    log::debug!("{:?}", collist);
     let cclient = reqwest::Client::new();
 
     // a bit too complex if you ask me: https://github.com/benkay86/async-applied/tree/master/reqwest-tokio-compat

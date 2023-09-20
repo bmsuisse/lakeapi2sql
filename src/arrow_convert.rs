@@ -93,14 +93,14 @@ pub(crate) fn get_token_rows<'a>(
         let mightcol = batch.column_by_name(colname);
 
         if let None = mightcol {
-            println!("colname: {}. Not found", colname);
+            log::debug!("colname: {}. Not found", colname);
             for rowindex in 0..rows {
                 token_rows[rowindex].push(ColumnData::String(None));
             }
             continue;
         }
         let col = mightcol.unwrap();
-        println!(
+        log::debug!(
             "colname: {}. Dt: {:?}. Sql Type: {:?}",
             colname,
             col.data_type(),
