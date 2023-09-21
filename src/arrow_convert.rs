@@ -109,7 +109,7 @@ pub(crate) fn get_token_rows<'a>(
         //For docs: col.data_type().to_physical_type()
         match col.data_type() {
             arrow::datatypes::DataType::Boolean => {
-                assert_eq!(coltype, &ColumnType::Bit);
+                assert!(coltype == &ColumnType::Bit || coltype == &ColumnType::Bitn);
                 let ba = col.as_any().downcast_ref::<BooleanArray>().unwrap();
                 let mut rowindex = 0;
                 for val in ba.iter() {
