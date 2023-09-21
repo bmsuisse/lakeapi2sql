@@ -38,6 +38,7 @@ fn into_dict<'a>(py: Python<'a>, schema: Arc<Schema>) -> &PyDict {
 async fn insert_arrow_stream_to_sql_rs(
     connection_string: String,
     table_name: String,
+    column_names: Vec<String>,
     url: String,
     user: String,
     password: String,
@@ -50,7 +51,18 @@ async fn insert_arrow_stream_to_sql_rs(
         )));
     }
     let mut db_client = db_client.unwrap();
-    let bres = bulk_insert::bulk_insert(&mut db_client, &table_name, &url, &user, &password).await;
+    let bres = bulk_insert::bulk_insert(
+        &mut db_client,
+        &table_name,
+        &column_names
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>(),
+        &url,
+        &user,
+        &password,
+    )
+    .await;
     if let Err(er) = bres {
         return Err(PyErr::new::<PyIOError, _>(format!(
             "Error connecting: {er}"
@@ -64,6 +76,7 @@ fn insert_arrow_stream_to_sql(
     py: Python,
     connection_string: String,
     table_name: String,
+    column_names: Vec<String>,
     url: String,
     user: String,
     password: String,
@@ -73,6 +86,7 @@ fn insert_arrow_stream_to_sql(
         let res = insert_arrow_stream_to_sql_rs(
             connection_string,
             table_name,
+            column_names,
             url,
             user,
             password,

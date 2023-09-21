@@ -16,11 +16,11 @@ pyo3-asyncio = { version = "0.19", features = ["attributes", "tokio-runtime"] }
 pyo3-log = "0.8.2"
 reqwest = { version = "0.11.18", features = ["stream"] }
 rust_decimal = "1.32.0"
-tiberius = { version = "0.12.2", features = [
+tiberius = { git = "https://github.com/aersam/tiberius.git", branch = "bulk", features = [
     "time",
     "sql-browser-tokio",
     "rust_decimal",
-] }
+] } #  
 time = "0.3.22"
 tokio = { version = "1.28.2", features = ["net", "macros"] }
 tokio-util = { version = "0.7.8", features = ["compat", "io-util", "io"] }

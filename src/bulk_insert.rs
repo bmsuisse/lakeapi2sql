@@ -7,6 +7,7 @@ use futures::stream::TryStreamExt;
 use log::info;
 use tiberius::Client;
 use tiberius::ColumnType;
+use tiberius::SqlBulkCopyOptions;
 use tokio::net::TcpStream;
 use tokio_util::compat::Compat;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -80,6 +81,7 @@ async fn get_cols_from_table(
 pub async fn bulk_insert<'a>(
     db_client: &'a mut Client<Compat<TcpStream>>,
     table_name: &str,
+    column_names: &'a [&'a str],
     url: &str,
     user: &str,
     password: &str,
@@ -141,8 +143,9 @@ pub async fn bulk_insert<'a>(
         let nrows = v.num_rows();
         info!("received {nrows}");
         let rows = get_token_rows(&v, &collist)?;
-        let mut blk: tiberius::BulkLoadRequest<'_, Compat<TcpStream>> =
-            db_client.bulk_insert(table_name).await?;
+        let mut blk: tiberius::BulkLoadRequest<'_, Compat<TcpStream>> = db_client
+            .bulk_insert_with_options(table_name, column_names, SqlBulkCopyOptions::TableLock, &[])
+            .await?;
         for rowdt in rows {
             blk.send(rowdt).await?;
         }
