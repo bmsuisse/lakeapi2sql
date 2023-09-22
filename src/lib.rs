@@ -4,9 +4,13 @@ use arrow::datatypes::{Field, Schema};
 use pyo3::exceptions::{PyConnectionError, PyIOError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
+mod arrow_batch_sql_writer;
 mod arrow_convert;
+mod arrow_writer;
 pub mod bulk_insert;
 pub mod connect;
+mod error;
+pub use error::{rust_python_error_free, rust_python_error_message, RustPythonError};
 
 fn field_into_dict<'a>(py: Python<'a>, field: &'a Field) -> &'a PyDict {
     let d = PyDict::new(py);

@@ -1,6 +1,8 @@
 import inspect
 from typing import Awaitable, TypedDict
 import lakeapi2sql._lowlevel as lvd
+import pyarrow as pa
+from pyarrow.cffi import ffi as arrow_ffi
 
 
 class BulkInfoField(TypedDict):
@@ -10,6 +12,17 @@ class BulkInfoField(TypedDict):
 
 class BulkInfo(TypedDict):
     fields: list[BulkInfoField]
+
+
+async def insert_record_batch_to_sql(reader: pa.RecordBatchReader):
+    # Allocate structures where we will export the Array data and the Array schema. They will be
+    # released when we exit the with block.
+    with arrow_ffi.new("struct ArrowSchema*") as c_schema:
+        # Get the references to the C Data structures.
+        c_schema_ptr = int(arrow_ffi.cast("uintptr_t", c_schema))
+
+        # Export the schema to the C Data structures.
+        reader.schema._export_to_c(c_schema_ptr)
 
 
 async def insert_http_arrow_stream_to_sql(

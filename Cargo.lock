@@ -244,6 +244,9 @@ name = "arrow-schema"
 version = "42.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba9ed245bd2d7d97ad1457cb281d4296e8b593588758b8fec6d67b2b2b0f2265"
+dependencies = [
+ "bitflags 2.4.0",
+]
 
 [[package]]
 name = "arrow-select"

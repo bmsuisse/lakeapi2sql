@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.1,<2.0"]
+requires = ["cffi", "maturin>=1.1,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -12,13 +12,16 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 
+dependencies = ["cffi", "pyarrow >= 8.0.0"]
+
 [project.optional-dependencies]
 azure = ["azure-identity>=1.12.0"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "lakeapi2sql._lowlevel"
-
+bindings = "cffi"
+python-source = "python"
 
 [tool.pyright]
 venv = ".venv"
