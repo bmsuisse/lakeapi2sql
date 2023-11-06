@@ -20,8 +20,6 @@ azure = ["azure-identity>=1.12.0"]
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "lakeapi2sql._lowlevel"
-bindings = "cffi"
-python-source = "python"
 
 [tool.pyright]
 venv = ".venv"

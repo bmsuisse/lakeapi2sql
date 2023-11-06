@@ -10,7 +10,7 @@ data = [pa.array([1, 2, 3, 4]), pa.array(["foo", "bar", "baz", None]), pa.array(
 
 batch = pa.record_batch(data, names=["f0", "f1", "f2"])
 
-
+batchreader = pa.RecordBatchReader.from_batches(batch.schema, [batch])
 load_dotenv()
 ## in order to use sql express, be sure to enable tcp for sql express and to start sql browser service
 constr = "DRIVER=ODBC Driver 17 for SQL Server;" + os.getenv(
@@ -25,15 +25,15 @@ async def test_bulk_insert():
     load_dotenv()
     print(constr_db)
     with pyodbc.connect(constr_db) as db:
-        db.execute("drop table if exists ##ft;create table ##ft(f0 int, f1 nvarchar(100), f2 bit)")
-    print("before http call")
+        db.execute("drop table if exists ##ft;create table ##ft(f0 bigint, f1 nvarchar(100), f2 bit)")
+    print("before insert")
     res = await lakeapi2sql.bulk_insert.insert_record_batch_to_sql(
         os.getenv(
             "SQL_CON_STR",
             "Server=tcp:localhost\\SQLExpress;database=lakeapi2sqltest;encrypt=no;IntegratedSecurity=yes;TrustServerCertificate=true",
         ),
         "##ft",
-        batch,
+        batchreader,
         ["f0", "f1", "f2"],
     )
     # db.execute("drop table if exists user_result")

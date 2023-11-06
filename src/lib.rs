@@ -9,8 +9,6 @@ use pyo3::types::{PyDict, PyString};
 mod arrow_convert;
 pub mod bulk_insert;
 pub mod connect;
-mod error;
-pub use error::{rust_python_error_free, rust_python_error_message, RustPythonError};
 use tokio::net::TcpStream;
 
 fn field_into_dict<'a>(py: Python<'a>, field: &'a Field) -> &'a PyDict {
