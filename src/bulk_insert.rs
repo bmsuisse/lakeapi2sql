@@ -1,5 +1,7 @@
 use std::{fmt::Display, sync::Arc};
 
+use arrow::ffi_stream::ArrowArrayStreamReader;
+use arrow::record_batch::RecordBatchReader;
 use arrow::{
     datatypes::Schema, error::ArrowError, ipc::reader::StreamReader, record_batch::RecordBatch,
 };
@@ -176,4 +178,41 @@ pub async fn bulk_insert<'a>(
     }
     let schema = worker.await?;
     schema
+}
+
+pub async fn bulk_insert_reader(
+    db_client: &mut Client<Compat<TcpStream>>,
+    table_name: &str,
+    column_names: &[&str],
+    reader: &mut ArrowArrayStreamReader,
+) -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {
+    //let mut row = TokenRow::new();
+    //row.push(1.into_sql());
+    //blk.send(row).await?;
+    //blk.finalize().await?;
+
+    let collist = get_cols_from_table(db_client, table_name, column_names).await?;
+    log::debug!("{:?}", collist);
+    let schema = reader.schema();
+    loop {
+        match reader.next() {
+            Some(x) => match x {
+                Ok(b) => {
+                    let mut blk = db_client
+                        .bulk_insert_with_options(
+                            table_name,
+                            &column_names,
+                            SqlBulkCopyOptions::TableLock,
+                            &[],
+                        )
+                        .await?;
+                    bulk_insert_batch(&mut blk, &b, &collist).await?;
+                    blk.finalize().await?;
+                }
+                Err(l) => println!("{:?}", l),
+            },
+            None => break,
+        };
+    }
+    Ok(schema)
 }
