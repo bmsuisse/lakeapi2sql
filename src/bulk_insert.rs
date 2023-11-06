@@ -1,5 +1,7 @@
 use std::{fmt::Display, sync::Arc};
 
+use arrow::ffi_stream::ArrowArrayStreamReader;
+use arrow::record_batch::RecordBatchReader;
 use arrow::{
     datatypes::Schema, error::ArrowError, ipc::reader::StreamReader, record_batch::RecordBatch,
 };
@@ -66,8 +68,17 @@ impl std::error::Error for SendErrorWrap {
 async fn get_cols_from_table(
     db_client: &mut Client<Compat<TcpStream>>,
     table_name: &str,
+    column_names: &[&str],
 ) -> Result<Vec<(String, ColumnType)>, Box<dyn std::error::Error + Send + Sync>> {
-    let query = format!("SELECT TOP 0 * FROM {}", table_name);
+    let cols_sql = match column_names.len() {
+        0 => "*".to_owned(),
+        _ => column_names
+            .iter()
+            .map(|c| format!("[{}]", c))
+            .collect::<Vec<String>>()
+            .join(", "),
+    };
+    let query = format!("SELECT TOP 0 {} FROM {}", cols_sql, table_name);
     let mut colres = db_client.simple_query(query).await?;
     Ok(colres
         .columns()
@@ -76,6 +87,21 @@ async fn get_cols_from_table(
         .iter()
         .map(|x| (x.name().to_string(), x.column_type()))
         .collect::<Vec<(String, ColumnType)>>())
+}
+
+pub async fn bulk_insert_batch<'a>(
+    blk: &mut tiberius::BulkLoadRequest<'a, Compat<TcpStream>>,
+    batch: &'a RecordBatch,
+    collist: &'a Vec<(String, ColumnType)>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let nrows = batch.num_rows();
+    info!("received {nrows}");
+    let rows = get_token_rows(batch, &collist)?;
+    for rowdt in rows {
+        blk.send(rowdt).await?;
+    }
+    info!("Written {nrows}");
+    Ok(())
 }
 
 pub async fn bulk_insert<'a>(
@@ -91,7 +117,7 @@ pub async fn bulk_insert<'a>(
     //blk.send(row).await?;
     //blk.finalize().await?;
 
-    let collist = get_cols_from_table(db_client, table_name).await?;
+    let collist = get_cols_from_table(db_client, table_name, column_names).await?;
     log::debug!("{:?}", collist);
     let cclient = reqwest::Client::new();
 
@@ -138,20 +164,55 @@ pub async fn bulk_insert<'a>(
             Ok(schema)
         },
     );
-
     while let Some(v) = rx.recv().await {
-        let nrows = v.num_rows();
-        info!("received {nrows}");
-        let rows = get_token_rows(&v, &collist)?;
-        let mut blk: tiberius::BulkLoadRequest<'_, Compat<TcpStream>> = db_client
-            .bulk_insert_with_options(table_name, column_names, SqlBulkCopyOptions::TableLock, &[])
+        let mut blk = db_client
+            .bulk_insert_with_options(
+                table_name,
+                &column_names,
+                SqlBulkCopyOptions::TableLock,
+                &[],
+            )
             .await?;
-        for rowdt in rows {
-            blk.send(rowdt).await?;
-        }
+        bulk_insert_batch(&mut blk, &v, &collist).await?;
         blk.finalize().await?;
-        info!("Written {nrows}");
     }
     let schema = worker.await?;
     schema
+}
+
+pub async fn bulk_insert_reader(
+    db_client: &mut Client<Compat<TcpStream>>,
+    table_name: &str,
+    column_names: &[&str],
+    reader: &mut ArrowArrayStreamReader,
+) -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {
+    //let mut row = TokenRow::new();
+    //row.push(1.into_sql());
+    //blk.send(row).await?;
+    //blk.finalize().await?;
+
+    let collist = get_cols_from_table(db_client, table_name, column_names).await?;
+    log::debug!("{:?}", collist);
+    let schema = reader.schema();
+    loop {
+        match reader.next() {
+            Some(x) => match x {
+                Ok(b) => {
+                    let mut blk = db_client
+                        .bulk_insert_with_options(
+                            table_name,
+                            &column_names,
+                            SqlBulkCopyOptions::TableLock,
+                            &[],
+                        )
+                        .await?;
+                    bulk_insert_batch(&mut blk, &b, &collist).await?;
+                    blk.finalize().await?;
+                }
+                Err(l) => println!("{:?}", l),
+            },
+            None => break,
+        };
+    }
+    Ok(schema)
 }
