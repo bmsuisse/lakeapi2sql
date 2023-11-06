@@ -17,7 +17,7 @@ pyo3-asyncio = { git = "https://github.com/awestlake87/pyo3-asyncio.git", "branc
     "tokio-runtime",
 ] }
 # TODO: switch back to v0.20 once available
-pyo3-log = "0.8.2"
+pyo3-log = "0.9.0"
 reqwest = { version = "0.11.18", features = ["stream"] }
 rust_decimal = "1.32.0"
 tiberius = { git = "https://github.com/aersam/tiberius.git", branch = "bulk", features = [
