@@ -57,7 +57,7 @@ async def insert_record_batch_to_sql(
 ):
     connection_string, aad_token = await _prepare_connection_string(connection_string, aad_token)
 
-    return await lvd.insert_arrow_reader_to_sql(connection_string, reader, table_name, col_names, aad_token)
+    return await lvd.insert_arrow_reader_to_sql(connection_string, reader, table_name, col_names or [], aad_token)
 
 
 async def insert_http_arrow_stream_to_sql(
