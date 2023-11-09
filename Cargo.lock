@@ -1005,7 +1005,7 @@ dependencies = [
 
 [[package]]
 name = "lake2sql"
-version = "0.7.0"
+version = "0.7.2"
 dependencies = [
  "arrow",
  "futures",

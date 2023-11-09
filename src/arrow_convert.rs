@@ -73,9 +73,9 @@ fn to_col_dt<'a>(d: ColumnData<'_>) -> ColumnData<'a> {
     }
 }
 
-pub(crate) fn get_token_rows<'a>(
+pub(crate) fn get_token_rows<'a, 'b>(
     batch: &'a RecordBatch,
-    colsnames: &'a Vec<(String, ColumnType)>,
+    colsnames: &'b Vec<(String, ColumnType)>,
 ) -> Result<Vec<TokenRow<'a>>, Box<dyn std::error::Error + Send + Sync>> {
     let unix_min_date = Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1)?;
     let sql_min_date = Date::from_calendar_date(1, tiberius::time::time::Month::January, 1)?;
@@ -87,7 +87,7 @@ pub(crate) fn get_token_rows<'a>(
     //let mut token_rows: Vec<TokenRow> = vec![TokenRow::new(); rows.try_into()?];
     let mut token_rows: Vec<TokenRow<'a>> = Vec::with_capacity(rows);
     for _ in 0..rows {
-        token_rows.push(TokenRow::new());
+        token_rows.push(TokenRow::with_capacity(colsnames.len()));
     }
     for (colname, coltype) in colsnames {
         let mightcol = batch.column_by_name(colname);
