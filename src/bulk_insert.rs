@@ -90,17 +90,19 @@ async fn get_cols_from_table(
 }
 
 pub async fn bulk_insert_batch<'a>(
+    table_name: &str,
     blk: &mut tiberius::BulkLoadRequest<'a, Compat<TcpStream>>,
     batch: &'a RecordBatch,
     collist: &'a Vec<(String, ColumnType)>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let nrows = batch.num_rows();
-    info!("received {nrows}");
+    info!("{table_name}: received {nrows}");
     let rows = get_token_rows(batch, &collist)?;
+    info!("{table_name}: converted {nrows}");
     for rowdt in rows {
         blk.send(rowdt).await?;
     }
-    info!("Written {nrows}");
+    info!("{table_name}: Written {nrows}");
     Ok(())
 }
 
@@ -173,7 +175,7 @@ pub async fn bulk_insert<'a>(
                 &[],
             )
             .await?;
-        bulk_insert_batch(&mut blk, &v, &collist).await?;
+        bulk_insert_batch(table_name, &mut blk, &v, &collist).await?;
         blk.finalize().await?;
     }
     let schema = worker.await?;
@@ -206,7 +208,7 @@ pub async fn bulk_insert_reader(
                             &[],
                         )
                         .await?;
-                    bulk_insert_batch(&mut blk, &b, &collist).await?;
+                    bulk_insert_batch(table_name, &mut blk, &b, &collist).await?;
                     blk.finalize().await?;
                 }
                 Err(l) => println!("{:?}", l),
