@@ -216,14 +216,24 @@ pub(crate) fn get_token_rows<'a>(
             }
             arrow::datatypes::DataType::Int8 => {
                 let ba = col.as_any().downcast_ref::<Int8Array>().unwrap();
-
-                let mut rowindex = 0;
-                for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::I16(match val {
-                        Some(v) => Some(v as i16),
-                        None => None,
-                    }));
-                    rowindex += 1;
+                if coltype == &ColumnType::Int2 {
+                    let mut rowindex = 0;
+                    for val in ba.iter() {
+                        token_rows[rowindex].push(ColumnData::I16(match val {
+                            Some(v) => Some(v as i16),
+                            None => None,
+                        }));
+                        rowindex += 1;
+                    }
+                } else {
+                    let mut rowindex = 0;
+                    for val in ba.iter() {
+                        token_rows[rowindex].push(ColumnData::U8(match val {
+                            Some(v) => Some(v as u8),
+                            None => None,
+                        }));
+                        rowindex += 1;
+                    }
                 }
             }
             arrow::datatypes::DataType::Int16 => {
