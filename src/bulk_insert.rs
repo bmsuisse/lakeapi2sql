@@ -16,6 +16,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::io::SyncIoBridge;
 
 use tokio::sync::mpsc;
+use tokio::task;
 
 use crate::arrow_convert::get_token_rows;
 
@@ -97,7 +98,7 @@ pub async fn bulk_insert_batch<'a>(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let nrows = batch.num_rows();
     info!("{table_name}: received {nrows}");
-    let rows = get_token_rows(batch, &collist)?;
+    let rows = task::block_in_place(|| get_token_rows(batch, &collist))?;
     info!("{table_name}: converted {nrows}");
     for rowdt in rows {
         blk.send(rowdt).await?;
