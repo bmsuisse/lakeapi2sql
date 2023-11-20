@@ -201,8 +201,31 @@ pub(crate) fn get_token_rows<'a, 'b>(
                 }
             }
             arrow::datatypes::DataType::Null => {
-                for rowindex in 0..rows {
-                    token_rows[rowindex].push(ColumnData::I32(None));
+                if coltype == &ColumnType::BigVarChar
+                    || coltype == &ColumnType::Text
+                    || coltype == &ColumnType::NVarchar
+                    || coltype == &ColumnType::NChar
+                    || coltype == &ColumnType::BigChar
+                    || coltype == &ColumnType::NText
+                {
+                    for rowindex in 0..rows {
+                        token_rows[rowindex].push(ColumnData::String(None));
+                    }
+                } else if coltype == &ColumnType::Datetime
+                    || coltype == &ColumnType::Datetimen
+                    || coltype == &ColumnType::Datetime4
+                {
+                    for rowindex in 0..rows {
+                        token_rows[rowindex].push(ColumnData::DateTime(None));
+                    }
+                } else if coltype == &ColumnType::Bit || coltype == &ColumnType::Bitn {
+                    for rowindex in 0..rows {
+                        token_rows[rowindex].push(ColumnData::Bit(None));
+                    }
+                } else {
+                    for rowindex in 0..rows {
+                        token_rows[rowindex].push(ColumnData::I32(None));
+                    }
                 }
             }
             arrow::datatypes::DataType::UInt8 => {
