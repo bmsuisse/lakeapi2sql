@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "lakeapi2sql"
 requires-python = ">=3.10"
-version = "0.7.4"
+version = "0.7.5"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
