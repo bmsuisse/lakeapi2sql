@@ -26,7 +26,7 @@ tokio = { version = "1.28.2", features = ["net", "macros"] }
 tokio-util = { version = "0.7.8", features = ["compat", "io-util", "io"] }
 
 [target.'cfg(unix)'.dependencies]
-openssl = { version = "0.10.59" }
+openssl = { version = "0.10.59", features = ["vendored"] }
 
 [dependencies.pyo3]
 version = "0.20.0"
