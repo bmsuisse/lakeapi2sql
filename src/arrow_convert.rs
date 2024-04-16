@@ -18,6 +18,7 @@ use arrow::array::StringArray;
 use arrow::array::Time32SecondArray;
 use arrow::array::TimestampMicrosecondArray;
 use arrow::array::TimestampMillisecondArray;
+use arrow::array::TimestampNanosecondArray;
 use arrow::array::UInt16Array;
 use arrow::array::UInt32Array;
 use arrow::array::UInt64Array;
@@ -187,6 +188,27 @@ pub(crate) fn get_token_rows<'a, 'b>(
                                 ColumnData::DateTime2(None)
                             } else {
                                 to_col_dt((unix_min + StdDuration::from_micros(vs as u64)).to_sql())
+                            }
+                        }
+                        None => ColumnData::DateTime2(None),
+                    });
+                    rowindex += 1;
+                }
+            }
+            arrow::datatypes::DataType::Timestamp(arrow::datatypes::TimeUnit::Nanosecond, _) => {
+                let ba = col
+                    .as_any()
+                    .downcast_ref::<TimestampNanosecondArray>()
+                    .unwrap();
+
+                let mut rowindex = 0;
+                for val in ba.iter() {
+                    token_rows[rowindex].push(match val {
+                        Some(vs) => {
+                            if vs < 0 {
+                                ColumnData::DateTime2(None)
+                            } else {
+                                to_col_dt((unix_min + StdDuration::from_nanos(vs as u64)).to_sql())
                             }
                         }
                         None => ColumnData::DateTime2(None),
