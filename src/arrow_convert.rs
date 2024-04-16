@@ -151,10 +151,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
                     rowindex += 1;
                 }
             }
-            arrow::datatypes::DataType::Timestamp(
-                arrow::datatypes::TimeUnit::Millisecond,
-                None,
-            ) => {
+            arrow::datatypes::DataType::Timestamp(arrow::datatypes::TimeUnit::Millisecond, _) => {
                 let ba = col
                     .as_any()
                     .downcast_ref::<TimestampMillisecondArray>()
@@ -176,10 +173,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
                     rowindex += 1;
                 }
             }
-            arrow::datatypes::DataType::Timestamp(
-                arrow::datatypes::TimeUnit::Microsecond,
-                None,
-            ) => {
+            arrow::datatypes::DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, _) => {
                 let ba = col
                     .as_any()
                     .downcast_ref::<TimestampMicrosecondArray>()
