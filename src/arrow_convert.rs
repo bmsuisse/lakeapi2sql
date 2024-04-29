@@ -352,11 +352,21 @@ pub(crate) fn get_token_rows<'a, 'b>(
             }
             arrow::datatypes::DataType::Float64 => {
                 let ba = col.as_any().downcast_ref::<Float64Array>().unwrap();
-
-                let mut rowindex = 0;
-                for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::F64(val));
-                    rowindex += 1;
+                if coltype == &ColumnType::Int4 || coltype == &ColumnType::Intn {
+                    let mut rowindex = 0;
+                    for val in ba.iter() {
+                        token_rows[rowindex].push(ColumnData::I32(match val {
+                            Some(v) => Some(v as i32),
+                            None => None,
+                        }));
+                        rowindex += 1;
+                    }
+                } else {
+                    let mut rowindex = 0;
+                    for val in ba.iter() {
+                        token_rows[rowindex].push(ColumnData::F64(val));
+                        rowindex += 1;
+                    }
                 }
             }
             arrow::datatypes::DataType::Date32 => {
