@@ -38,32 +38,7 @@ use tiberius::ColumnType;
 use tiberius::ToSql;
 use tiberius::TokenRow;
 
-#[derive(Debug)]
-pub(crate) struct NotSupportedError {
-    dtype: DataType,
-    column_type: ColumnType,
-}
-impl Display for NotSupportedError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "Cannot use data type {}. Sql Type: {:?}",
-            self.dtype, self.column_type
-        ))
-    }
-}
-impl std::error::Error for NotSupportedError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-
-    fn description(&self) -> &str {
-        "description() is deprecated; use Display"
-    }
-
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        self.source()
-    }
-}
+use crate::error::LakeApi2SqlError;
 
 fn to_col_dt<'a>(d: ColumnData<'_>) -> ColumnData<'a> {
     match d {
@@ -77,11 +52,14 @@ fn to_col_dt<'a>(d: ColumnData<'_>) -> ColumnData<'a> {
 pub(crate) fn get_token_rows<'a, 'b>(
     batch: &'a RecordBatch,
     colsnames: &'b Vec<(String, ColumnType)>,
-) -> Result<Vec<TokenRow<'a>>, Box<dyn std::error::Error + Send + Sync>> {
-    let unix_min_date = Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1)?;
-    let sql_min_date = Date::from_calendar_date(1, tiberius::time::time::Month::January, 1)?;
-    let sql_min_datetime = Date::from_calendar_date(1900, tiberius::time::time::Month::January, 1)?;
-    let unix_min: PrimitiveDateTime = unix_min_date.with_time(Time::from_hms(0, 0, 0)?);
+) -> Result<Vec<TokenRow<'a>>, LakeApi2SqlError> {
+    let unix_min_date =
+        Date::from_calendar_date(1970, tiberius::time::time::Month::January, 1).unwrap();
+    let sql_min_date =
+        Date::from_calendar_date(1, tiberius::time::time::Month::January, 1).unwrap();
+    let sql_min_datetime =
+        Date::from_calendar_date(1900, tiberius::time::time::Month::January, 1).unwrap();
+    let unix_min: PrimitiveDateTime = unix_min_date.with_time(Time::from_hms(0, 0, 0).unwrap());
     let sql_min_to_unix_min = (unix_min_date - sql_min_date).whole_days();
     let sql_min_dt_to_unix_min = (unix_min_date - sql_min_datetime).whole_days();
     let rows = batch.num_rows();
@@ -503,7 +481,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
             }
             arrow::datatypes::DataType::Decimal128(_, s) => {
                 let ba = col.as_any().downcast_ref::<Decimal128Array>().unwrap();
-                let scale: u8 = s.clone().try_into()?;
+                let scale: u8 = s.clone().try_into().unwrap();
                 let mut rowindex = 0;
                 match coltype {
                     ColumnType::Numericn | ColumnType::Decimaln => {
@@ -525,18 +503,18 @@ pub(crate) fn get_token_rows<'a, 'b>(
                         }
                     }
                     _ => {
-                        return Err(Box::new(NotSupportedError {
+                        return Err(LakeApi2SqlError::NotSupported {
                             dtype: col.data_type().clone(),
                             column_type: coltype.clone(),
-                        }))
+                        })
                     } //other => panic!("Not supported {:?}", other),
                 }
             }
             dt => {
-                return Err(Box::new(NotSupportedError {
+                return Err(LakeApi2SqlError::NotSupported {
                     dtype: dt.clone(),
                     column_type: coltype.clone(),
-                }))
+                })
             } //other => panic!("Not supported {:?}", other),
         }
     }

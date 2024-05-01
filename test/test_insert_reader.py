@@ -5,7 +5,7 @@ import lakeapi2sql.bulk_insert
 import os
 from dotenv import load_dotenv
 
-data = [pa.array([1, 2, 3, 4]), pa.array(["foo", "bar", "baz", None]), pa.array([True, None, False, True])]
+data = [pa.array([1, 2, 3, 4]), pa.array(["foo", "bar", "$ä,àE", None]), pa.array([True, None, False, True])]
 
 
 batch = pa.record_batch(data, names=["f0", "f1", "f2"])

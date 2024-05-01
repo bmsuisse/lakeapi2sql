@@ -9,6 +9,7 @@ use pyo3::types::{PyDict, PyString};
 mod arrow_convert;
 pub mod bulk_insert;
 pub mod connect;
+pub mod error;
 use tokio::net::TcpStream;
 
 fn field_into_dict<'a>(py: Python<'a>, field: &'a Field) -> &'a PyDict {
@@ -141,14 +142,9 @@ fn insert_arrow_reader_to_sql<'a>(
         ArrowArrayStreamReader::from_pyarrow(record_batch_reader)?;
 
     pyo3_asyncio::tokio::future_into_py(py, async move {
-        let db_client = connect::connect_sql(&connection_string, aad_token).await;
-        if let Err(er) = db_client {
-            return Err(PyErr::new::<PyConnectionError, _>(format!(
-                "Error connecting: {er}"
-            )));
-        }
+        let mut db_client = connect::connect_sql(&connection_string, aad_token).await?;
         let bres = bulk_insert::bulk_insert_reader(
-            &mut db_client.unwrap(),
+            &mut db_client,
             &table_name,
             &column_names
                 .iter()
@@ -156,15 +152,10 @@ fn insert_arrow_reader_to_sql<'a>(
                 .collect::<Vec<&str>>(),
             &mut reader,
         )
-        .await;
+        .await?;
 
-        if let Err(er) = bres {
-            return Err(PyErr::new::<PyIOError, _>(format!(
-                "Error connecting: {er}"
-            )));
-        }
         Ok(Python::with_gil(|py| {
-            let d: Py<PyDict> = into_dict(py, bres.unwrap()).into();
+            let d: Py<PyDict> = into_dict(py, bres).into();
             d
         }))
     })
