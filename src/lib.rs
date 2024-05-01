@@ -1,4 +1,4 @@
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 use std::sync::Arc;
 
 use arrow::datatypes::{Field, Schema};
@@ -135,8 +135,9 @@ fn connect_sql<'a>(
 #[pyfunction]
 fn execute_sql<'a>(
     py: Python<'a>,
-    conn: &'a MsSqlConnection,
+    conn: &MsSqlConnection,
     query: String,
+    args: Vec<&PyAny>,
 ) -> PyResult<&'a PyAny> {
     fn into_list(els: &[u64]) -> Py<PyList> {
         return Python::with_gil(|py2| {
@@ -148,8 +149,45 @@ fn execute_sql<'a>(
             list2
         });
     }
-    pyo3_asyncio::tokio::future_into_py(py, async {
-        let res = conn.0.lock().await.execute(query, &[]).await;
+    let tds_args = args
+        .iter()
+        .map(|x| {
+            if x.is_none() {
+                let b_box: Box<dyn ToSql> = Box::new(Option::<i64>::None);
+                Ok(b_box)
+            } else if let Ok(v) = x.extract::<i64>() {
+                let b_box: Box<dyn ToSql> = Box::new(v);
+                Ok(b_box)
+            } else if let Ok(v) = x.extract::<f64>() {
+                let b_box: Box<dyn ToSql> = Box::new(v);
+                Ok(b_box)
+            } else if let Ok(v) = x.extract::<String>() {
+                let b_box: Box<dyn ToSql> = Box::new(v);
+                Ok(b_box)
+            } else if let Ok(v) = x.extract::<bool>() {
+                let b_box: Box<dyn ToSql> = Box::new(v);
+                Ok(b_box)
+            } else {
+                Err(PyErr::new::<PyTypeError, _>("Unsupported type"))
+            }
+        })
+        .collect::<Result<Vec<Box<dyn ToSql>>, PyErr>>()?;
+    let mutex = conn.0.clone();
+    pyo3_asyncio::tokio::future_into_py(py, async move {
+        let prms: Vec<_> = tds_args.iter().map(|x| &(*x)).collect();
+        let res = mutex
+            .clone()
+            .lock()
+            .await
+            .execute(
+                query,
+                &tds_args
+                    .iter()
+                    .map(|x| x.borrow() as &dyn ToSql)
+                    .collect::<Vec<&dyn ToSql>>()
+                    .as_slice(),
+            )
+            .await;
 
         match res {
             Ok(re) => {
