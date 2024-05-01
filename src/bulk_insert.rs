@@ -2,9 +2,7 @@ use std::{fmt::Display, sync::Arc};
 
 use arrow::ffi_stream::ArrowArrayStreamReader;
 use arrow::record_batch::RecordBatchReader;
-use arrow::{
-    datatypes::Schema, error::ArrowError, ipc::reader::StreamReader, record_batch::RecordBatch,
-};
+use arrow::{datatypes::Schema, ipc::reader::StreamReader, record_batch::RecordBatch};
 use futures::stream::TryStreamExt;
 use log::info;
 use tiberius::Client;
@@ -19,58 +17,13 @@ use tokio::sync::mpsc;
 use tokio::task;
 
 use crate::arrow_convert::get_token_rows;
-
-#[derive(Debug)]
-pub(crate) struct ArrowErrorWrap {
-    error: ArrowError,
-}
-impl Display for ArrowErrorWrap {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("arrow error {}", self.error))
-    }
-}
-impl std::error::Error for ArrowErrorWrap {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-
-    fn description(&self) -> &str {
-        "description() is deprecated; use Display"
-    }
-
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        self.source()
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct SendErrorWrap {
-    error: String,
-}
-impl Display for SendErrorWrap {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("send error {}", self.error))
-    }
-}
-impl std::error::Error for SendErrorWrap {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-
-    fn description(&self) -> &str {
-        "description() is deprecated; use Display"
-    }
-
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        self.source()
-    }
-}
+use crate::error::LakeApi2SqlError;
 
 async fn get_cols_from_table(
     db_client: &mut Client<Compat<TcpStream>>,
     table_name: &str,
     column_names: &[&str],
-) -> Result<Vec<(String, ColumnType)>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<(String, ColumnType)>, LakeApi2SqlError> {
     let cols_sql = match column_names.len() {
         0 => "*".to_owned(),
         _ => column_names
@@ -95,7 +48,7 @@ pub async fn bulk_insert_batch<'a>(
     blk: &mut tiberius::BulkLoadRequest<'a, Compat<TcpStream>>,
     batch: &'a RecordBatch,
     collist: &'a Vec<(String, ColumnType)>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), LakeApi2SqlError> {
     let nrows = batch.num_rows();
     info!("{table_name}: received {nrows}");
     let rows = task::block_in_place(|| get_token_rows(batch, &collist))?;
@@ -114,7 +67,7 @@ pub async fn bulk_insert<'a>(
     url: &str,
     user: &str,
     password: &str,
-) -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Arc<Schema>, LakeApi2SqlError> {
     //let mut row = TokenRow::new();
     //row.push(1.into_sql());
     //blk.send(row).await?;
@@ -141,32 +94,22 @@ pub async fn bulk_insert<'a>(
         .compat();
     let (tx, mut rx) = mpsc::channel::<RecordBatch>(2);
     let syncstr = SyncIoBridge::new(res);
-    let worker = tokio::task::spawn_blocking(
-        move || -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {
-            let reader = StreamReader::try_new(syncstr, None);
-            if let Err(err) = reader {
-                return Err(Box::new(ArrowErrorWrap { error: err }));
-            }
-            let mut reader = reader.unwrap();
-            let schema = reader.schema();
-            loop {
-                match reader.next() {
-                    Some(x) => match x {
-                        Ok(b) => {
-                            tx.blocking_send(b).map_err(|e| {
-                                Box::new(SendErrorWrap {
-                                    error: e.to_string(),
-                                })
-                            })?;
-                        }
-                        Err(l) => println!("{:?}", l),
-                    },
-                    None => break,
-                };
-            }
-            Ok(schema)
-        },
-    );
+    let worker = tokio::task::spawn_blocking(move || -> Result<Arc<Schema>, LakeApi2SqlError> {
+        let mut reader = StreamReader::try_new(syncstr, None)?;
+        let schema = reader.schema();
+        loop {
+            match reader.next() {
+                Some(x) => match x {
+                    Ok(b) => {
+                        tx.blocking_send(b)?;
+                    }
+                    Err(l) => println!("{:?}", l),
+                },
+                None => break,
+            };
+        }
+        Ok(schema)
+    });
     while let Some(v) = rx.recv().await {
         let mut blk = db_client
             .bulk_insert_with_options(
@@ -188,7 +131,7 @@ pub async fn bulk_insert_reader(
     table_name: &str,
     column_names: &[&str],
     reader: &mut ArrowArrayStreamReader,
-) -> Result<Arc<Schema>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Arc<Schema>, LakeApi2SqlError> {
     //let mut row = TokenRow::new();
     //row.push(1.into_sql());
     //blk.send(row).await?;
