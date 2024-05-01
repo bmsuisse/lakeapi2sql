@@ -1,15 +1,17 @@
+use std::borrow::BorrowMut;
 use std::sync::Arc;
 
 use arrow::datatypes::{Field, Schema};
 use arrow::ffi_stream::ArrowArrayStreamReader;
 use arrow::pyarrow::FromPyArrow;
-use pyo3::exceptions::{PyConnectionError, PyIOError};
+use pyo3::exceptions::{PyConnectionError, PyIOError, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString};
+use pyo3::types::{PyDict, PyInt, PyList, PyString};
 mod arrow_convert;
 pub mod bulk_insert;
 pub mod connect;
 pub mod error;
+use tiberius::ToSql;
 use tokio::net::TcpStream;
 
 fn field_into_dict<'a>(py: Python<'a>, field: &'a Field) -> &'a PyDict {
@@ -106,7 +108,9 @@ fn insert_arrow_stream_to_sql(
 
 /// Opaque type to transport connection to an MsSqlConnection over language boundry
 #[pyclass]
-pub struct MsSqlConnection(tiberius::Client<tokio_util::compat::Compat<TcpStream>>);
+pub struct MsSqlConnection(
+    Arc<tokio::sync::Mutex<tiberius::Client<tokio_util::compat::Compat<TcpStream>>>>,
+);
 
 #[pyfunction]
 fn connect_sql<'a>(
@@ -119,12 +123,39 @@ fn connect_sql<'a>(
 
         match res {
             Ok(re) => Python::with_gil(|py| {
-                let cell = Py::new(py, MsSqlConnection(re));
+                let cell = Py::new(py, MsSqlConnection(Arc::new(tokio::sync::Mutex::new(re))));
                 return cell;
             }),
             Err(er) => Err(PyErr::new::<PyConnectionError, _>(format!(
                 "Error connecting: {er}"
             ))),
+        }
+    })
+}
+#[pyfunction]
+fn execute_sql<'a>(
+    py: Python<'a>,
+    conn: &'a MsSqlConnection,
+    query: String,
+) -> PyResult<&'a PyAny> {
+    fn into_list(els: &[u64]) -> Py<PyList> {
+        return Python::with_gil(|py2| {
+            let list = PyList::new::<u64, _>(py2, vec![]);
+            for row in els {
+                list.append(row).unwrap();
+            }
+            let list2: Py<PyList> = list.into();
+            list2
+        });
+    }
+    pyo3_asyncio::tokio::future_into_py(py, async {
+        let res = conn.0.lock().await.execute(query, &[]).await;
+
+        match res {
+            Ok(re) => {
+                return Ok(into_list(re.rows_affected()));
+            }
+            Err(er) => Err(PyErr::new::<PyIOError, _>(format!("Error executing: {er}"))),
         }
     })
 }
@@ -167,6 +198,7 @@ fn _lowlevel(_py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(insert_arrow_stream_to_sql, m)?)?;
     m.add_function(wrap_pyfunction!(connect_sql, m)?)?;
+    m.add_function(wrap_pyfunction!(execute_sql, m)?)?;
     m.add_function(wrap_pyfunction!(insert_arrow_reader_to_sql, m)?)?;
 
     Ok(())
