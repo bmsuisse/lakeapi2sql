@@ -43,7 +43,7 @@ pub async fn connect_sql(
                 Ok(v) => v.instance,
                 Err(_) => None,
             };
-            if let Some(v) = instance {
+            if instance.is_some() {
                 let tcp = TcpStream::connect_named(&config).await?;
                 tcp.set_nodelay(true)?;
                 Client::connect(config, tcp.compat_write()).await?
