@@ -23,11 +23,11 @@ use arrow::array::UInt16Array;
 use arrow::array::UInt32Array;
 use arrow::array::UInt64Array;
 use arrow::array::UInt8Array;
-use arrow::datatypes::DataType;
+
 use arrow::record_batch::RecordBatch;
 use rust_decimal::prelude::*;
 use std::borrow::Cow;
-use std::fmt::Display;
+
 use std::time::Duration as StdDuration;
 use tiberius::numeric::Numeric;
 use tiberius::time::time::Date;
@@ -71,7 +71,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
     for (colname, coltype) in colsnames {
         let mightcol = batch.column_by_name(colname);
 
-        if let None = mightcol {
+        if mightcol.is_none() {
             log::debug!("colname: {}. Not found", colname);
             for rowindex in 0..rows {
                 token_rows[rowindex].push(ColumnData::String(None));
@@ -111,10 +111,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::String(match val {
-                        Some(vs) => Some(Cow::from(vs)),
-                        None => None,
-                    }));
+                    token_rows[rowindex].push(ColumnData::String(val.map(Cow::from)));
                     rowindex += 1;
                 }
             }
@@ -123,10 +120,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::String(match val {
-                        Some(vs) => Some(Cow::from(vs)),
-                        None => None,
-                    }));
+                    token_rows[rowindex].push(ColumnData::String(val.map(Cow::from)));
                     rowindex += 1;
                 }
             }
@@ -236,19 +230,13 @@ pub(crate) fn get_token_rows<'a, 'b>(
                 if coltype == &ColumnType::Int2 {
                     let mut rowindex = 0;
                     for val in ba.iter() {
-                        token_rows[rowindex].push(ColumnData::I16(match val {
-                            Some(v) => Some(v as i16),
-                            None => None,
-                        }));
+                        token_rows[rowindex].push(ColumnData::I16(val.map(|v| v as i16)));
                         rowindex += 1;
                     }
                 } else {
                     let mut rowindex = 0;
                     for val in ba.iter() {
-                        token_rows[rowindex].push(ColumnData::U8(match val {
-                            Some(v) => Some(v as u8),
-                            None => None,
-                        }));
+                        token_rows[rowindex].push(ColumnData::U8(val.map(|v| v as u8)));
                         rowindex += 1;
                     }
                 }
@@ -276,10 +264,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::I32(match val {
-                        Some(x) => Some(x.clone().into()),
-                        None => None,
-                    }));
+                    token_rows[rowindex].push(ColumnData::I32(val.map(|x| x.into())));
                     rowindex += 1;
                 }
             }
@@ -288,10 +273,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::I64(match val {
-                        Some(x) => Some(x.clone().into()),
-                        None => None,
-                    }));
+                    token_rows[rowindex].push(ColumnData::I64(val.map(|x| x.into())));
                     rowindex += 1;
                 }
             }
@@ -300,10 +282,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::I64(match val {
-                        Some(x) => Some(x.clone() as i64),
-                        None => None,
-                    }));
+                    token_rows[rowindex].push(ColumnData::I64(val.map(|x| x as i64)));
                     rowindex += 1;
                 }
             }
@@ -312,10 +291,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::F32(match val {
-                        Some(x) => Some(x.to_f32()),
-                        None => None,
-                    }));
+                    token_rows[rowindex].push(ColumnData::F32(val.map(|x| x.to_f32())));
                     rowindex += 1;
                 }
             }
@@ -333,10 +309,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
                 if coltype == &ColumnType::Int4 || coltype == &ColumnType::Intn {
                     let mut rowindex = 0;
                     for val in ba.iter() {
-                        token_rows[rowindex].push(ColumnData::I32(match val {
-                            Some(v) => Some(v as i32),
-                            None => None,
-                        }));
+                        token_rows[rowindex].push(ColumnData::I32(val.map(|v| v as i32)));
                         rowindex += 1;
                     }
                 } else {
@@ -457,7 +430,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x| Cow::from(x))));
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(Cow::from)));
                     rowindex += 1;
                 }
             }
@@ -466,7 +439,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x| Cow::from(x))));
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(Cow::from)));
                     rowindex += 1;
                 }
             }
@@ -475,13 +448,13 @@ pub(crate) fn get_token_rows<'a, 'b>(
 
                 let mut rowindex = 0;
                 for val in ba.iter() {
-                    token_rows[rowindex].push(ColumnData::Binary(val.map(|x| Cow::from(x))));
+                    token_rows[rowindex].push(ColumnData::Binary(val.map(Cow::from)));
                     rowindex += 1;
                 }
             }
             arrow::datatypes::DataType::Decimal128(_, s) => {
                 let ba = col.as_any().downcast_ref::<Decimal128Array>().unwrap();
-                let scale: u8 = s.clone().try_into().unwrap();
+                let scale: u8 = (*s).try_into().unwrap();
                 let mut rowindex = 0;
                 match coltype {
                     ColumnType::Numericn | ColumnType::Decimaln => {
@@ -505,7 +478,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
                     _ => {
                         return Err(LakeApi2SqlError::NotSupported {
                             dtype: col.data_type().clone(),
-                            column_type: coltype.clone(),
+                            column_type: *coltype,
                         })
                     } //other => panic!("Not supported {:?}", other),
                 }
@@ -513,7 +486,7 @@ pub(crate) fn get_token_rows<'a, 'b>(
             dt => {
                 return Err(LakeApi2SqlError::NotSupported {
                     dtype: dt.clone(),
-                    column_type: coltype.clone(),
+                    column_type: *coltype,
                 })
             } //other => panic!("Not supported {:?}", other),
         }
