@@ -244,7 +244,7 @@ impl ToSql for ValueWrap {
 
 fn to_exec_args(args: Vec<&PyAny>) -> Result<Vec<ValueWrap>, PyErr> {
     let mut res: Vec<ValueWrap> = Vec::new();
-    for i in 0..args.len() - 1 {
+    for i in 0..args.len() {
         let x = args[i];
         res.push(ValueWrap(if x.is_none() {
             Box::new(Option::<i64>::None) as Box<dyn ToSql>

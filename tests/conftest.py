@@ -2,6 +2,7 @@ import pytest
 import os
 import logging
 from dotenv import load_dotenv
+import pytest_asyncio
 
 load_dotenv()
 
@@ -26,7 +27,6 @@ class DB_Connection:
         if os.path.exists("tests/_data"):
             shutil.rmtree("tests/_data")
         os.makedirs("tests/_data", exist_ok=True)
-        from bmsdna.sql_utils.query import build_connection_string
 
         conn_str = _build_connection_string(
             os.getenv("TDS_MASTER_CONN", None)
@@ -89,7 +89,7 @@ def spawn_sql():
             sql_server.stop()
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session")
 async def connection(spawn_sql):
     async with DB_Connection() as c:
         yield c

@@ -31,7 +31,7 @@ jobs:
           pip install maturin
       - name: Install Dependencies
         run: |
-          pip install pytest polars pyarrow pytest-asyncio pyright python-dotenv docker pyright
+          pip install pytest polars pyarrow pytest-asyncio pyright python-dotenv docker pyright cffi
       - name: Install Project
         run: maturin develop
       - name: pytest
