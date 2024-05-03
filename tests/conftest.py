@@ -65,8 +65,8 @@ class DB_Connection:
                 await self.conn.execute_sql(sql)
         return self
 
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        await self.conn.__aexit__()
+    async def __aexit__(self, *args, **kwargs):
+        await self.conn.__aexit__(*args, **kwargs)
         pass
 
     def new_connection(self):

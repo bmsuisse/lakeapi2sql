@@ -13,7 +13,7 @@ class TdsConnection:
         self._connection = await lvd.connect_sql(connection_string, aad_token)
         return self
 
-    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+    async def __aexit__(self, *args, **kwargs) -> None:
         pass
 
     async def execute_sql(self, sql: str, arguments: list[str | int | float | bool | None] = None) -> list[int]:
