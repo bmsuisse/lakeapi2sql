@@ -28,14 +28,19 @@ jobs:
       - name: Install tooling dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install maturin
+          pip install maturin pyright
+      - name: Create venv
+        run: python -m venv .venv
       - name: Install Dependencies
         run: |
-          pip install pytest polars pyarrow pytest-asyncio pyright python-dotenv docker pyright cffi
+          source .venv/bin/activate
+          pip install pytest polars pyarrow pytest-asyncio python-dotenv docker cffi
       - name: Install Project
         run: maturin develop
       - name: pytest
         shell: bash
-        run: pytest
+        run: |
+          source .venv/bin/activate
+          pytest
       - name: Pyright
-        run: poetry run pyright .
+        run: pyright .
