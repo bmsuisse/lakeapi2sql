@@ -5,7 +5,7 @@ use arrow::datatypes::{Field, Schema};
 use arrow::ffi_stream::ArrowArrayStreamReader;
 use arrow::pyarrow::FromPyArrow;
 
-use futures::{StreamExt, TryStreamExt};
+use futures::TryStreamExt;
 use pyo3::exceptions::{PyConnectionError, PyIOError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
@@ -50,7 +50,7 @@ fn into_dict_result(py: Python<'_>, meta: Option<ResultMetadata>, rows: Vec<Row>
             .iter()
             .map(|f| {
                 let d = PyDict::new(py);
-                d.set_item("name", f.name().clone()).unwrap();
+                d.set_item("name", f.name()).unwrap();
                 d.set_item("column_type", format!("{0:?}", f.column_type()))
                     .unwrap();
 
@@ -138,7 +138,7 @@ fn into_dict_result(py: Python<'_>, meta: Option<ResultMetadata>, rows: Vec<Row>
             )
         }),
     );
-    d.set_item("rows", py_rows);
+    d.set_item("rows", py_rows).unwrap();
     d
 }
 
