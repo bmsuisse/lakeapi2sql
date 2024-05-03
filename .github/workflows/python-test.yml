@@ -1,0 +1,44 @@
+name: Python Test
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore: ["README.md", "docs", ".github"]
+  pull_request:
+    branches: ["main"]
+    paths-ignore: ["README.md", "docs", ".github"]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}¨
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64
+          args: --out dist --find-interpreter
+          sccache: "true"
+          manylinux: auto
+      - name: Install tooling dependencies
+        run: |
+          python -m pip install --upgrade pip
+      - name: pytest
+        shell: bash
+        run: |
+          set -e
+          pip install lakeapi2sql --find-links dist --force-reinstall
+          pip install pytest polars pyarrow pytest-asyncio pyright
+          pytest
+      - name: Pyright
+        run: |
+          poetry run pyright .

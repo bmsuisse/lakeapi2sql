@@ -4,12 +4,13 @@ from lakeapi2sql.utils import prepare_connection_string
 
 class TdsConnection:
     def __init__(self, connection_string: str, aad_token: str | None = None) -> None:
-        connection_string, aad_token = await prepare_connection_string(connection_string, aad_token)
         self._connection_string = connection_string
         self._aad_token = aad_token
 
     async def __aenter__(self) -> "TdsConnection":
-        self._connection = await lvd.connect_sql(self.connection_string, self.aad_token)
+        connection_string, aad_token = await prepare_connection_string(self.connection_string, self.aad_token)
+
+        self._connection = await lvd.connect_sql(connection_string, aad_token)
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
