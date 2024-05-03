@@ -34,7 +34,7 @@ jobs:
       - name: Install Dependencies
         run: |
           source .venv/bin/activate
-          pip install pytest polars pyarrow pytest-asyncio python-dotenv docker cffi
+          pip install pytest polars pyarrow pytest-asyncio python-dotenv docker cffi azure-identity
       - name: Install Project
         run: maturin develop
       - name: pytest
