@@ -280,27 +280,50 @@ fn execute_sql<'a>(
             list2
         });
     }
+    let nr_args = args.len();
     let tds_args = to_exec_args(args)?;
 
     let mutex = conn.0.clone();
     pyo3_asyncio::tokio::future_into_py(py, async move {
-        let res = mutex
-            .clone()
-            .lock()
-            .await
-            .execute(
-                query,
-                tds_args
-                    .iter()
-                    .map(|x| x.0.borrow() as &dyn ToSql)
-                    .collect::<Vec<&dyn ToSql>>()
-                    .as_slice(),
-            )
-            .await;
+        let res = if nr_args > 0 {
+            mutex
+                .clone()
+                .lock()
+                .await
+                .execute(
+                    query,
+                    tds_args
+                        .iter()
+                        .map(|x| x.0.borrow() as &dyn ToSql)
+                        .collect::<Vec<&dyn ToSql>>()
+                        .as_slice(),
+                )
+                .await
+                .map(|x| x.rows_affected().to_owned())
+        } else {
+            let arc = mutex.clone();
+            let lock = arc.lock();
+            let mut conn = lock.await;
+            let res = conn.simple_query(query).await;
+            match res {
+                Ok(mut stream) => {
+                    let mut row_count: u64 = 0;
+                    while let Some(item) = stream.try_next().await.map_err(|er| {
+                        PyErr::new::<PyIOError, _>(format!("Error executing: {er}"))
+                    })? {
+                        if let QueryItem::Row(_) = item {
+                            row_count += 1;
+                        }
+                    }
+                    Ok(vec![row_count])
+                }
+                Err(a) => Err(a),
+            }
+        };
 
         match res {
             Ok(re) => {
-                return Ok(into_list(re.rows_affected()));
+                return Ok(into_list(&re));
             }
             Err(er) => Err(PyErr::new::<PyIOError, _>(format!("Error executing: {er}"))),
         }
