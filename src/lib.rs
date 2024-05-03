@@ -8,7 +8,7 @@ use error::LakeApi2SqlError;
 use futures::{StreamExt, TryStreamExt};
 use pyo3::exceptions::{PyConnectionError, PyIOError, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyInt, PyList, PyString};
+use pyo3::types::{PyDict, PyInt, PyList, PyString, PyTuple};
 mod arrow_convert;
 pub mod bulk_insert;
 pub mod connect;
@@ -63,7 +63,7 @@ fn into_dict_result<'a>(py: Python<'a>, meta: Option<ResultMetadata>, rows: Vec<
     let mut py_rows = PyList::new(
         py,
         rows.iter().map(|row| {
-            PyList::new(
+            PyTuple::new(
                 py,
                 row.cells()
                     .map(|(c, val)| match val {

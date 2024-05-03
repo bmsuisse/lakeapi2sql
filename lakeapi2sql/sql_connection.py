@@ -1,5 +1,16 @@
 import lakeapi2sql._lowlevel as lvd
 from lakeapi2sql.utils import prepare_connection_string
+from typing import TypedDict
+
+
+class TdsColumn(TypedDict):
+    name: str
+    column_type: str
+
+
+class TdsResult(TypedDict):
+    columns: list[TdsColumn]
+    rows: list[dict]
 
 
 class TdsConnection:
@@ -21,5 +32,5 @@ class TdsConnection:
 
     async def execute_sql_with_result(
         self, sql: str, arguments: list[str | int | float | bool | None] = None
-    ) -> list[int]:
+    ) -> TdsResult:
         return await lvd.execute_sql_with_result(self._connection, sql, arguments or [])
