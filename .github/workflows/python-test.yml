@@ -37,7 +37,7 @@ jobs:
         run: |
           set -e
           pip install lakeapi2sql --find-links dist --force-reinstall
-          pip install pytest polars pyarrow pytest-asyncio pyright
+          pip install pytest polars pyarrow pytest-asyncio pyright python-dotenv
           pytest
       - name: Pyright
         run: |
