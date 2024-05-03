@@ -27,10 +27,10 @@ class TdsConnection:
     async def __aexit__(self, *args, **kwargs) -> None:
         pass
 
-    async def execute_sql(self, sql: str, arguments: list[str | int | float | bool | None] = None) -> list[int]:
+    async def execute_sql(self, sql: str, arguments: list[str | int | float | bool | None] | None = None) -> list[int]:
         return await lvd.execute_sql(self._connection, sql, arguments or [])
 
     async def execute_sql_with_result(
-        self, sql: str, arguments: list[str | int | float | bool | None] = None
+        self, sql: str, arguments: list[str | int | float | bool | None] | None = None
     ) -> TdsResult:
         return await lvd.execute_sql_with_result(self._connection, sql, arguments or [])

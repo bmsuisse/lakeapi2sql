@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc};
+use std::sync::Arc;
 
 use arrow::ffi_stream::ArrowArrayStreamReader;
 use arrow::record_batch::RecordBatchReader;
@@ -51,7 +51,7 @@ pub async fn bulk_insert_batch<'a>(
 ) -> Result<(), LakeApi2SqlError> {
     let nrows = batch.num_rows();
     info!("{table_name}: received {nrows}");
-    let rows = task::block_in_place(|| get_token_rows(batch, &collist))?;
+    let rows = task::block_in_place(|| get_token_rows(batch, collist))?;
     info!("{table_name}: converted {nrows}");
     for rowdt in rows {
         blk.send(rowdt).await?;
@@ -112,18 +112,13 @@ pub async fn bulk_insert<'a>(
     });
     while let Some(v) = rx.recv().await {
         let mut blk = db_client
-            .bulk_insert_with_options(
-                table_name,
-                &column_names,
-                SqlBulkCopyOptions::TableLock,
-                &[],
-            )
+            .bulk_insert_with_options(table_name, column_names, SqlBulkCopyOptions::TableLock, &[])
             .await?;
         bulk_insert_batch(table_name, &mut blk, &v, &collist).await?;
         blk.finalize().await?;
     }
-    let schema = worker.await?;
-    schema
+
+    worker.await?
 }
 
 pub async fn bulk_insert_reader(
@@ -147,7 +142,7 @@ pub async fn bulk_insert_reader(
                     let mut blk = db_client
                         .bulk_insert_with_options(
                             table_name,
-                            &column_names,
+                            column_names,
                             SqlBulkCopyOptions::TableLock,
                             &[],
                         )

@@ -1,19 +1,19 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 use std::sync::Arc;
 
 use arrow::datatypes::{Field, Schema};
 use arrow::ffi_stream::ArrowArrayStreamReader;
 use arrow::pyarrow::FromPyArrow;
-use error::LakeApi2SqlError;
-use futures::{StreamExt, TryStreamExt};
+
+use futures::TryStreamExt;
 use pyo3::exceptions::{PyConnectionError, PyIOError, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyInt, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 mod arrow_convert;
 pub mod bulk_insert;
 pub mod connect;
 pub mod error;
-use tiberius::{FromSql, QueryItem, QueryStream, ResultMetadata, Row, ToSql};
+use tiberius::{FromSql, QueryItem, ResultMetadata, Row, ToSql};
 use tokio::net::TcpStream;
 
 fn field_into_dict<'a>(py: Python<'a>, field: &'a Field) -> &'a PyDict {
@@ -24,7 +24,7 @@ fn field_into_dict<'a>(py: Python<'a>, field: &'a Field) -> &'a PyDict {
 
     d
 }
-fn into_dict<'a>(py: Python<'a>, schema: Arc<Schema>) -> &PyDict {
+fn into_dict(py: Python<'_>, schema: Arc<Schema>) -> &PyDict {
     let d = PyDict::new(py);
     let fields: Vec<&PyDict> = schema
         .fields
@@ -42,15 +42,15 @@ fn into_dict<'a>(py: Python<'a>, schema: Arc<Schema>) -> &PyDict {
     d.set_item("metadata", metadata.unwrap()).unwrap();
     d
 }
-fn into_dict_result<'a>(py: Python<'a>, meta: Option<ResultMetadata>, rows: Vec<Row>) -> &PyDict {
+fn into_dict_result(py: Python<'_>, meta: Option<ResultMetadata>, rows: Vec<Row>) -> &PyDict {
     let d = PyDict::new(py);
     if let Some(meta) = meta {
         let fields: Vec<&PyDict> = meta
             .columns()
             .iter()
             .map(|f| {
-                let mut d = PyDict::new(py);
-                d.set_item("name", f.name().clone()).unwrap();
+                let d = PyDict::new(py);
+                d.set_item("name", f.name()).unwrap();
                 d.set_item("column_type", format!("{0:?}", f.column_type()))
                     .unwrap();
 
@@ -60,13 +60,13 @@ fn into_dict_result<'a>(py: Python<'a>, meta: Option<ResultMetadata>, rows: Vec<
 
         d.set_item("columns", fields).unwrap();
     }
-    let mut py_rows = PyList::new(
+    let py_rows = PyList::new(
         py,
         rows.iter().map(|row| {
             PyTuple::new(
                 py,
                 row.cells()
-                    .map(|(c, val)| match val {
+                    .map(|(_c, val)| match val {
                         tiberius::ColumnData::U8(o) => o.into_py(py),
                         tiberius::ColumnData::I16(o) => o.into_py(py),
                         tiberius::ColumnData::I32(o) => o.into_py(py),
@@ -86,48 +86,48 @@ fn into_dict_result<'a>(py: Python<'a>, meta: Option<ResultMetadata>, rows: Vec<
                             o.as_ref().map(|x| x.clone().to_string()).into_py(py)
                         }
                         tiberius::ColumnData::DateTime(o) => o
-                            .map(|x| {
-                                tiberius::time::time::PrimitiveDateTime::from_sql(&val)
+                            .map(|_x| {
+                                tiberius::time::time::PrimitiveDateTime::from_sql(val)
                                     .unwrap()
                                     .unwrap()
                                     .to_string()
                             })
                             .into_py(py),
                         tiberius::ColumnData::SmallDateTime(o) => o
-                            .map(|x| {
-                                tiberius::time::time::PrimitiveDateTime::from_sql(&val)
+                            .map(|_x| {
+                                tiberius::time::time::PrimitiveDateTime::from_sql(val)
                                     .unwrap()
                                     .unwrap()
                                     .to_string()
                             })
                             .into_py(py),
                         tiberius::ColumnData::Time(o) => o
-                            .map(|x| {
-                                tiberius::time::time::Time::from_sql(&val)
+                            .map(|_x| {
+                                tiberius::time::time::Time::from_sql(val)
                                     .unwrap()
                                     .unwrap()
                                     .to_string()
                             })
                             .into_py(py),
                         tiberius::ColumnData::Date(o) => o
-                            .map(|x| {
-                                tiberius::time::time::Date::from_sql(&val)
+                            .map(|_x| {
+                                tiberius::time::time::Date::from_sql(val)
                                     .unwrap()
                                     .unwrap()
                                     .to_string()
                             })
                             .into_py(py),
                         tiberius::ColumnData::DateTime2(o) => o
-                            .map(|x| {
-                                tiberius::time::time::PrimitiveDateTime::from_sql(&val)
+                            .map(|_x| {
+                                tiberius::time::time::PrimitiveDateTime::from_sql(val)
                                     .unwrap()
                                     .unwrap()
                                     .to_string()
                             })
                             .into_py(py),
                         tiberius::ColumnData::DateTimeOffset(o) => o
-                            .map(|x| {
-                                tiberius::time::time::PrimitiveDateTime::from_sql(&val)
+                            .map(|_x| {
+                                tiberius::time::time::PrimitiveDateTime::from_sql(val)
                                     .unwrap()
                                     .unwrap()
                                     .to_string()
@@ -138,7 +138,7 @@ fn into_dict_result<'a>(py: Python<'a>, meta: Option<ResultMetadata>, rows: Vec<
             )
         }),
     );
-    d.set_item("rows", py_rows);
+    d.set_item("rows", py_rows).unwrap();
     d
 }
 
@@ -214,18 +214,17 @@ pub struct MsSqlConnection(
 );
 
 #[pyfunction]
-fn connect_sql<'a>(
-    py: Python<'a>,
+fn connect_sql(
+    py: Python<'_>,
     connection_string: String,
     aad_token: Option<String>,
-) -> PyResult<&'a PyAny> {
+) -> PyResult<&PyAny> {
     pyo3_asyncio::tokio::future_into_py(py, async move {
         let res = connect::connect_sql(&connection_string, aad_token).await;
 
         match res {
             Ok(re) => Python::with_gil(|py| {
-                let cell = Py::new(py, MsSqlConnection(Arc::new(tokio::sync::Mutex::new(re))));
-                return cell;
+                Py::new(py, MsSqlConnection(Arc::new(tokio::sync::Mutex::new(re))))
             }),
             Err(er) => Err(PyErr::new::<PyConnectionError, _>(format!(
                 "Error connecting: {er}"
@@ -271,14 +270,14 @@ fn execute_sql<'a>(
     args: Vec<&PyAny>,
 ) -> PyResult<&'a PyAny> {
     fn into_list(els: &[u64]) -> Py<PyList> {
-        return Python::with_gil(|py2| {
+        Python::with_gil(|py2| {
             let list = PyList::new::<u64, _>(py2, vec![]);
             for row in els {
                 list.append(row).unwrap();
             }
             let list2: Py<PyList> = list.into();
             list2
-        });
+        })
     }
     let nr_args = args.len();
     let tds_args = to_exec_args(args)?;
@@ -322,9 +321,7 @@ fn execute_sql<'a>(
         };
 
         match res {
-            Ok(re) => {
-                return Ok(into_list(&re));
-            }
+            Ok(re) => Ok(into_list(&re)),
             Err(er) => Err(PyErr::new::<PyIOError, _>(format!("Error executing: {er}"))),
         }
     })
@@ -372,11 +369,11 @@ fn execute_sql_with_result<'a>(
                         // ... and from there on from 0..N rows
                         QueryItem::Row(row) if row.result_index() == 0 => rows.push(row),
                         // the second result set returns first another metadata item
-                        QueryItem::Metadata(meta) => {
+                        QueryItem::Metadata(_meta) => {
                             break;
                         }
                         // ...and, again, we get rows from the second resultset
-                        QueryItem::Row(row) => {
+                        QueryItem::Row(_row) => {
                             break;
                         }
                     }
